@@ -68,6 +68,9 @@ class RadioPlayer {
 
         this.toggleButton.addEventListener('click', () => this.handleToggle());
 
+        // Set audio source dynamically so the correct URL is used in both local and production
+        this.audioElement.src = this.getApiUrl('/api/radio/audio');
+
         // Prevent direct audio control
         this.audioElement.addEventListener('play', (e) => {
             if (!this.isPlaying) {
@@ -231,23 +234,17 @@ class RadioPlayer {
     syncAudioElement() {
         if (!this.audioElement) return;
 
-        if (this.audioElement.readyState < this.audioElement.HAVE_FUTURE_DATA) {
-            setTimeout(() => this.syncAudioElement(), 100);
-            return;
-        }
-
-        const timeDiff = Math.abs(this.audioElement.currentTime - this.elapsedTime);
-
-        if (timeDiff > this.syncThreshold) {
-            try {
-                this.audioElement.currentTime = this.elapsedTime;
-                console.log(`Synced audio to ${this.elapsedTime.toFixed(2)}s`);
-            } catch (error) {
-                console.warn('Could not set currentTime:', error);
-            }
-        }
-
         if (this.isPlaying) {
+            if (this.audioElement.readyState >= this.audioElement.HAVE_FUTURE_DATA) {
+                const timeDiff = Math.abs(this.audioElement.currentTime - this.elapsedTime);
+                if (timeDiff > this.syncThreshold) {
+                    try {
+                        this.audioElement.currentTime = this.elapsedTime;
+                    } catch (error) {
+                        console.warn('Could not set currentTime:', error);
+                    }
+                }
+            }
             this.audioElement.play().catch(err => {
                 console.warn('Autoplay prevented by browser:', err);
             });
