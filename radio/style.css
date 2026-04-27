@@ -108,6 +108,35 @@ body {
     color: #00ff00;
 }
 
+.listen-button {
+    padding: 14px 50px;
+    border: 2px solid #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 1.2em;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+}
+
+.listen-button:hover:not(:disabled) {
+    background: rgba(0, 255, 0, 0.25);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+}
+
+.listen-button.listening {
+    background: rgba(0, 255, 0, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+.listen-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
 .play-button {
     padding: 12px 40px;
     border: 2px solid #00ff00;

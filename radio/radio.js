@@ -2,6 +2,7 @@ class RadioPlayer {
     constructor() {
         this.audioElement = document.getElementById('radioAudio');
         this.toggleButton = document.getElementById('toggleButton');
+        this.listenButton = document.getElementById('listenButton');
         this.playButton = document.getElementById('playButton');
         this.statusText = document.getElementById('statusText');
         this.timeDisplay = document.getElementById('timeDisplay');
@@ -22,12 +23,17 @@ class RadioPlayer {
         this.toggleUrl = this.getApiUrl('/api/radio/toggle');
         this.authUrl = this.getApiUrl('/api/radio/auth');
 
-        // Playback state
+        // Server broadcast state
         this.isPlaying = false;
         this.elapsedTime = 0;
         this.duration = 27.096;
         this.fetchTimestamp = Date.now();
-        this.syncThreshold = 0.5;
+
+        // Local listen state (independent of server broadcast)
+        this.isListening = false;
+        // Only seek to sync position when audio first starts, or drift exceeds this
+        this.syncThreshold = 2.0;
+        this.needsInitialSync = true;
 
         // Auth state
         this.isAuthenticated = false;
@@ -49,15 +55,23 @@ class RadioPlayer {
         this.passwordInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handleAuth();
         });
+        this.listenButton.addEventListener('click', () => this.handleListen());
         this.playButton.addEventListener('click', () => this.handlePlay());
         this.loginLink.addEventListener('click', (e) => {
             e.preventDefault();
             this.openModal();
         });
         this.modalClose.addEventListener('click', () => this.closeModal());
-        // Close modal on backdrop click
         this.authModal.addEventListener('click', (e) => {
             if (e.target === this.authModal) this.closeModal();
+        });
+
+        // When audio ends (shouldn't happen with loop, but as safety net)
+        this.audioElement.addEventListener('ended', () => {
+            if (this.isListening && this.isPlaying) {
+                this.audioElement.currentTime = 0;
+                this.audioElement.play().catch(() => {});
+            }
         });
 
         if (this.storedToken) {
@@ -66,6 +80,50 @@ class RadioPlayer {
         }
 
         this.startPolling();
+    }
+
+    handleListen() {
+        if (!this.isListening) {
+            this.isListening = true;
+            this.needsInitialSync = true;
+            this.applyLocalAudio();
+        } else {
+            this.isListening = false;
+            this.audioElement.pause();
+        }
+        this.updateListenButton();
+    }
+
+    // Apply local audio state based on isListening + isPlaying (server state)
+    applyLocalAudio() {
+        if (!this.isListening || !this.isPlaying) {
+            if (!this.audioElement.paused) this.audioElement.pause();
+            return;
+        }
+
+        // On initial start or large drift, seek to server position first
+        if (this.needsInitialSync) {
+            this.needsInitialSync = false;
+            try {
+                this.audioElement.currentTime = this.elapsedTime;
+            } catch (e) {}
+        } else {
+            // Only re-seek if audio has drifted significantly
+            const timeDiff = Math.abs(this.audioElement.currentTime - this.elapsedTime);
+            if (timeDiff > this.syncThreshold) {
+                try {
+                    this.audioElement.currentTime = this.elapsedTime;
+                } catch (e) {}
+            }
+        }
+
+        if (this.audioElement.paused) {
+            this.audioElement.play().catch(err => {
+                console.warn('Autoplay prevented:', err);
+                this.isListening = false;
+                this.updateListenButton();
+            });
+        }
     }
 
     openModal() {
@@ -124,6 +182,7 @@ class RadioPlayer {
         this.authStatus.className = 'auth-status error';
     }
 
+    // Broadcaster: toggle server broadcast state
     async handlePlay() {
         this.playButton.disabled = true;
 
@@ -138,13 +197,18 @@ class RadioPlayer {
             this.isPlaying = data.is_playing;
             this.fetchTimestamp = Date.now();
 
-            // Immediately apply audio state without waiting for next poll
-            this.syncAudioElement();
-            this.updateUI();
-            this.clearError();
+            // When broadcast stops, also stop listening locally
+            if (!this.isPlaying && this.isListening) {
+                this.isListening = false;
+                this.audioElement.pause();
+                this.updateListenButton();
+            }
 
-            // Then sync from server to get accurate elapsed time
+            // When broadcast starts, mark as needing sync for next listen
+            if (this.isPlaying) this.needsInitialSync = true;
+
             await this.fetchState();
+            this.clearError();
         } catch (error) {
             this.showError(`Failed to toggle: ${error.message}`);
         } finally {
@@ -158,12 +222,25 @@ class RadioPlayer {
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
+            const wasPlaying = this.isPlaying;
             this.isPlaying = data.is_playing;
             this.elapsedTime = data.elapsed_time;
             this.duration = data.audio_duration;
             this.fetchTimestamp = Date.now();
 
-            this.syncAudioElement();
+            // Broadcast just started: mark for initial sync
+            if (!wasPlaying && this.isPlaying) {
+                this.needsInitialSync = true;
+            }
+
+            // Broadcast stopped: pause local audio
+            if (wasPlaying && !this.isPlaying && this.isListening) {
+                this.audioElement.pause();
+            }
+
+            // Apply local audio (won't seek unless needed)
+            if (this.isListening) this.applyLocalAudio();
+
             this.clearError();
             this.showMessage('Online', 'online');
             this.updateUI();
@@ -175,35 +252,8 @@ class RadioPlayer {
         }
     }
 
-    syncAudioElement() {
-        if (!this.audioElement) return;
-
-        if (this.isPlaying) {
-            if (this.audioElement.readyState >= this.audioElement.HAVE_FUTURE_DATA) {
-                const timeDiff = Math.abs(this.audioElement.currentTime - this.elapsedTime);
-                if (timeDiff > this.syncThreshold) {
-                    try {
-                        this.audioElement.currentTime = this.elapsedTime;
-                    } catch (error) {
-                        console.warn('Could not set currentTime:', error);
-                    }
-                }
-            }
-            if (this.audioElement.paused) {
-                this.audioElement.play().catch(err => {
-                    console.warn('Autoplay prevented by browser:', err);
-                });
-            }
-        } else {
-            if (!this.audioElement.paused) {
-                this.audioElement.pause();
-            }
-        }
-    }
-
     startPolling() {
         setInterval(() => this.fetchState(), 500);
-        // Smooth time display between server polls
         setInterval(() => this.updateTimeDisplay(), 100);
     }
 
@@ -214,8 +264,18 @@ class RadioPlayer {
         this.timeDisplay.textContent = this.formatTime(Math.min(interpolated, this.duration));
     }
 
+    updateListenButton() {
+        if (this.isListening) {
+            this.listenButton.innerHTML = '&#9632; Stop';
+            this.listenButton.classList.add('listening');
+        } else {
+            this.listenButton.innerHTML = '&#9654; Listen';
+            this.listenButton.classList.remove('listening');
+        }
+    }
+
     updateUI() {
-        // Toggle graphic reflects broadcast state for all users
+        // Toggle graphic reflects server broadcast state for all users
         if (this.isPlaying) {
             this.toggleButton.classList.add('on');
             this.toggleButton.classList.remove('off');
@@ -226,11 +286,14 @@ class RadioPlayer {
             this.toggleButton.querySelector('.switch-inner').textContent = 'OFF';
         }
 
-        // Play button label for broadcaster
+        // Listen button enabled only when broadcast is live
+        this.listenButton.disabled = !this.isPlaying;
+
+        // Broadcaster button label
         if (this.isAuthenticated) {
             this.playButton.innerHTML = this.isPlaying
-                ? '&#9632; Stop'
-                : '&#9654; Play';
+                ? '&#9632; Stop Broadcast'
+                : '&#9654; Start Broadcast';
         }
 
         this.updateTimeDisplay();

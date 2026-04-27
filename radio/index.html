@@ -21,8 +21,11 @@
                 <span class="switch-inner">OFF</span>
             </button>
 
-            <!-- Play/Stop button (broadcaster only) -->
-            <button id="playButton" class="play-button" style="display: none;">&#9654; Play</button>
+            <!-- Listen button (all users, local audio control) -->
+            <button id="listenButton" class="listen-button">&#9654; Listen</button>
+
+            <!-- Play/Stop button (broadcaster only, controls server broadcast) -->
+            <button id="playButton" class="play-button" style="display: none;">&#9654; Broadcast</button>
 
             <div class="status-indicator">
                 <span id="statusText" class="status-text">Offline</span>
@@ -49,7 +52,7 @@
             <a id="loginLink" class="login-link" href="#">Broadcaster</a>
         </div>
 
-        <audio id="radioAudio" preload="metadata"></audio>
+        <audio id="radioAudio" preload="auto" loop></audio>
     </div>
 
     <!-- Auth modal -->
