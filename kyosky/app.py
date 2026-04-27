@@ -236,6 +236,20 @@ def radio_toggle():
     })
 
 
+@app.route("/api/radio/audio")
+@app.route("/kyosky/api/radio/audio")
+def radio_audio():
+    """Serve the radio audio file."""
+    audio_file = os.path.join(os.path.dirname(__file__), "..", "kleener_punker", "sounds", "Antoine Villoutreix - Berlin.mp3")
+    
+    if not os.path.exists(audio_file):
+        logger.error(f"Audio file not found: {audio_file}")
+        return jsonify({"error": "Audio file not found"}), 404
+    
+    logger.info(f"Serving audio file: {audio_file}")
+    return send_file(audio_file, mimetype="audio/mpeg")
+
+
 @app.route("/radar", methods=["POST"])
 @app.route("/kyosky/radar", methods=["POST"])
 def radar():
