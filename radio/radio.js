@@ -1,6 +1,7 @@
 /**
- * Radio Player - Synchronized playback across multiple clients
- * Polls server for state and syncs audio element to shared playback position
+ * Radio Player - Client-side synchronized playback
+ * Uses localStorage to sync state across browser tabs/windows
+ * No backend required
  */
 
 class RadioPlayer {
@@ -13,36 +14,18 @@ class RadioPlayer {
         this.errorMessage = document.getElementById('errorMessage');
         this.listenerCount = document.getElementById('listenerCount');
 
-        // API paths
-        this.stateUrl = this.getApiUrl('/api/radio/state');
-        this.toggleUrl = this.getApiUrl('/api/radio/toggle');
-
         // State
         this.isPlaying = false;
         this.elapsedTime = 0;
-        this.duration = 201.552;
-        this.pollInterval = 500; // milliseconds
-        this.isPollActive = false;
-        this.lastSyncTime = 0;
+        this.duration = 201.552; // Antoine Villoutreix - Berlin.mp3 duration in seconds
+        this.lastToggleTime = 0;
+        this.syncInterval = 300; // milliseconds
         this.syncThreshold = 0.5; // seconds - threshold for sync correction
 
+        // localStorage key
+        this.storageKey = 'radio_state';
+
         this.init();
-    }
-
-    /**
-     * Determine correct API URL based on current location
-     */
-    getApiUrl(path) {
-        const isLocal = window.location.hostname === 'localhost' ||
-            window.location.hostname === '127.0.0.1';
-
-        if (isLocal) {
-            // Local development - use localhost:5001
-            return `http://localhost:5001${path}`;
-        } else {
-            // Production - use relative path
-            return path;
-        }
     }
 
     /**
@@ -51,7 +34,7 @@ class RadioPlayer {
     init() {
         this.toggleButton.addEventListener('click', () => this.handleToggle());
 
-        // Prevent direct audio control
+        // Prevent direct audio control - only server state controls playback
         this.audioElement.addEventListener('play', (e) => {
             if (!this.isPlaying) {
                 e.preventDefault();
@@ -66,39 +49,96 @@ class RadioPlayer {
             }
         });
 
-        // Start polling for state updates
-        this.startPolling();
+        // Listen for storage changes from other tabs
+        window.addEventListener('storage', (e) => {
+            if (e.key === this.storageKey) {
+                console.log('Radio state changed in another tab');
+                this.loadState();
+                this.updateUI();
+            }
+        });
 
-        this.showMessage('Connecting to server...', 'connecting');
+        // Load initial state and start syncing
+        this.loadState();
+        this.updateUI();
+        this.startSyncing();
+
+        this.showMessage('Ready', 'online');
+    }
+
+    /**
+     * Load state from localStorage
+     */
+    loadState() {
+        const stored = localStorage.getItem(this.storageKey);
+
+        if (stored) {
+            try {
+                const state = JSON.parse(stored);
+                this.isPlaying = state.is_playing;
+                this.lastToggleTime = state.last_toggle_time;
+
+                // Calculate current elapsed time
+                if (this.isPlaying) {
+                    const timeSinceToggle = (Date.now() - this.lastToggleTime) / 1000;
+                    this.elapsedTime = (timeSinceToggle % this.duration);
+                } else {
+                    this.elapsedTime = 0;
+                }
+            } catch (error) {
+                console.error('Error loading stored state:', error);
+                this.initializeState();
+            }
+        } else {
+            this.initializeState();
+        }
+    }
+
+    /**
+     * Initialize fresh state
+     */
+    initializeState() {
+        this.isPlaying = false;
+        this.lastToggleTime = Date.now();
+        this.elapsedTime = 0;
+        this.saveState();
+    }
+
+    /**
+     * Save state to localStorage
+     */
+    saveState() {
+        const state = {
+            is_playing: this.isPlaying,
+            last_toggle_time: this.lastToggleTime,
+            duration: this.duration
+        };
+        localStorage.setItem(this.storageKey, JSON.stringify(state));
     }
 
     /**
      * Handle toggle button click
      */
-    async handleToggle() {
+    handleToggle() {
         this.toggleButton.disabled = true;
 
         try {
-            const response = await fetch(this.toggleUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            this.isPlaying = data.is_playing;
-            this.lastSyncTime = data.timestamp;
-
-            // Immediately fetch new state to sync
-            await this.fetchState();
+            this.isPlaying = !this.isPlaying;
+            this.lastToggleTime = Date.now();
+            this.saveState();
 
             this.clearError();
             this.updateUI();
+
+            // Broadcast to other tabs
+            window.dispatchEvent(new StorageEvent('storage', {
+                key: this.storageKey,
+                newValue: JSON.stringify({
+                    is_playing: this.isPlaying,
+                    last_toggle_time: this.lastToggleTime,
+                    duration: this.duration
+                })
+            }));
         } catch (error) {
             console.error('Error toggling radio:', error);
             this.showError(`Failed to toggle: ${error.message}`);
@@ -108,48 +148,23 @@ class RadioPlayer {
     }
 
     /**
-     * Fetch current state from server
+     * Start periodic sync of audio element
      */
-    async fetchState() {
-        try {
-            const response = await fetch(this.stateUrl);
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            this.isPlaying = data.is_playing;
-            this.elapsedTime = data.elapsed_time;
-            this.duration = data.audio_duration;
-            this.lastSyncTime = data.timestamp;
-
-            // Sync audio element to server position
-            this.syncAudioElement();
-
-            this.clearError();
-            this.showMessage('Online', 'online');
-
-            return true;
-        } catch (error) {
-            console.error('Error fetching radio state:', error);
-            this.showError(`Connection error: ${error.message}`);
-            this.showMessage('Offline', 'error');
-            return false;
-        }
+    startSyncing() {
+        setInterval(() => this.syncAudioElement(), this.syncInterval);
     }
 
     /**
-     * Sync audio element's currentTime to server's elapsed time
+     * Sync audio element's currentTime to calculated elapsed time
      */
     syncAudioElement() {
         if (!this.audioElement) return;
 
+        // Reload state to account for time passing
+        this.loadState();
+
         // Check if audio is ready
         if (this.audioElement.readyState < this.audioElement.HAVE_FUTURE_DATA) {
-            // Audio not ready, try again soon
-            setTimeout(() => this.syncAudioElement(), 100);
             return;
         }
 
@@ -159,13 +174,13 @@ class RadioPlayer {
         if (timeDiff > this.syncThreshold) {
             try {
                 this.audioElement.currentTime = this.elapsedTime;
-                console.log(`Synced audio to ${this.elapsedTime.toFixed(2)}s (was ${(this.audioElement.currentTime - timeDiff).toFixed(2)}s)`);
+                console.log(`Synced audio to ${this.elapsedTime.toFixed(2)}s`);
             } catch (error) {
                 console.warn('Could not set currentTime:', error);
             }
         }
 
-        // Play or pause based on server state
+        // Play or pause based on state
         if (this.isPlaying) {
             this.audioElement.play().catch(err => {
                 console.warn('Autoplay prevented by browser:', err);
@@ -173,33 +188,8 @@ class RadioPlayer {
         } else {
             this.audioElement.pause();
         }
-    }
 
-    /**
-     * Start polling for state updates
-     */
-    startPolling() {
-        if (this.isPollActive) return;
-        this.isPollActive = true;
-
-        const poll = async () => {
-            if (!this.isPollActive) return;
-
-            await this.fetchState();
-            this.updateUI();
-
-            // Schedule next poll
-            setTimeout(poll, this.pollInterval);
-        };
-
-        poll();
-    }
-
-    /**
-     * Stop polling for state updates
-     */
-    stopPolling() {
-        this.isPollActive = false;
+        this.updateUI();
     }
 
     /**
@@ -220,8 +210,8 @@ class RadioPlayer {
         // Update time display
         this.timeDisplay.textContent = this.formatTime(this.elapsedTime);
 
-        // Update listener count (placeholder)
-        this.listenerCount.textContent = '∞';
+        // Update listener count (placeholder - just shows sync is active)
+        this.listenerCount.textContent = '✓';
     }
 
     /**
@@ -267,6 +257,5 @@ document.addEventListener('DOMContentLoaded', () => {
 // Cleanup on page unload
 window.addEventListener('unload', () => {
     if (window.radioPlayer) {
-        window.radioPlayer.stopPolling();
-    }
-});
+        // Keep state stored for next visit
+    });
