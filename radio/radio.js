@@ -52,7 +52,8 @@ class RadioPlayer {
         if (isLocal) {
             return `http://localhost:5001${path}`;
         } else {
-            return path;
+            // Production: Flask routes are prefixed with /kyosky/
+            return `/kyosky${path}`;
         }
     }
 
