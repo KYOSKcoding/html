@@ -23,7 +23,7 @@ RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 RADIO_STATE = {
     "is_playing": False,
     "last_toggled_time": time.time(),
-    "audio_duration": 188.856,  # Al_Bint_El_Shalabiya.mp3 duration in seconds
+    "audio_duration": 27.096,  # Jingle_Macker.mp3 duration in seconds
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -264,7 +264,7 @@ def radio_toggle():
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
     """Serve the radio audio file."""
-    audio_file = os.path.join(os.path.dirname(__file__), "..", "radio", "Al_Bint_El_Shalabiya.mp3")
+    audio_file = os.path.join(os.path.dirname(__file__), "..", "radio", "Jingle_Macker.mp3")
     
     if not os.path.exists(audio_file):
         logger.error(f"Audio file not found: {audio_file}")

@@ -12,26 +12,18 @@
     <div class="radio-container">
         <div class="radio-header">
             <h1>Ky - Broadcast</h1>
-            <p class="radio-track">Al Bint El Shalabiya</p>
-        </div>
-
-        <!-- Authentication Section -->
-        <div id="authSection" class="auth-section" style="display: none;">
-            <div class="auth-input-group">
-                <input type="password" id="passwordInput" class="auth-input" placeholder="Enter broadcast password" />
-                <button id="authButton" class="auth-button">Unlock Broadcast</button>
-            </div>
-            <span id="authStatus" class="auth-status"></span>
+            <p class="radio-track">Jingle Macker</p>
         </div>
 
         <div class="radio-control">
-            <button id="toggleButton" class="toggle-switch off" aria-label="Toggle radio" style="display: none;">
+            <!-- Status indicator (all users) -->
+            <button id="toggleButton" class="toggle-switch off" aria-label="Broadcast status">
                 <span class="switch-inner">OFF</span>
             </button>
-            <div id="waitingMessage" class="waiting-message" style="display: none;">
-                <p>🎙️ Waiting for broadcast...</p>
-                <p class="waiting-subtext">Current time: <span id="waitingTime">00:00</span></p>
-            </div>
+
+            <!-- Play/Stop button (broadcaster only) -->
+            <button id="playButton" class="play-button" style="display: none;">&#9654; Play</button>
+
             <div class="status-indicator">
                 <span id="statusText" class="status-text">Offline</span>
                 <span id="timeDisplay" class="time-display">00:00</span>
@@ -41,11 +33,11 @@
         <div class="radio-info">
             <div class="info-item">
                 <span class="label">Duration:</span>
-                <span id="durationDisplay">3:08</span>
+                <span id="durationDisplay">0:27</span>
             </div>
             <div class="info-item">
                 <span class="label">Listeners:</span>
-                <span id="listenerCount">∞</span>
+                <span id="listenerCount">&#8734;</span>
             </div>
         </div>
 
@@ -53,8 +45,24 @@
             <div class="error-message" id="errorMessage"></div>
         </div>
 
-        <!-- Hidden audio element for playback reference -->
+        <div class="broadcaster-footer">
+            <a id="loginLink" class="login-link" href="#">Broadcaster</a>
+        </div>
+
         <audio id="radioAudio" preload="metadata"></audio>
+    </div>
+
+    <!-- Auth modal -->
+    <div id="authModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button id="modalClose" class="modal-close">&#215;</button>
+            <h3>Broadcaster Login</h3>
+            <div class="auth-input-group">
+                <input type="password" id="passwordInput" class="auth-input" placeholder="Password" />
+                <button id="authButton" class="auth-button">Login</button>
+            </div>
+            <span id="authStatus" class="auth-status"></span>
+        </div>
     </div>
 
     <script src="radio.js"></script>

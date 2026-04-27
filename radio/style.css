@@ -45,14 +45,6 @@ body {
     font-style: italic;
 }
 
-.auth-section {
-    margin-bottom: 30px;
-    padding: 20px;
-    border: 1px solid #00aa00;
-    border-radius: 6px;
-    background: rgba(0, 170, 0, 0.05);
-}
-
 .auth-input-group {
     display: flex;
     gap: 10px;
@@ -116,24 +108,98 @@ body {
     color: #00ff00;
 }
 
-.waiting-message {
-    text-align: center;
-    padding: 30px 20px;
-    border: 1px dashed #00aa00;
-    border-radius: 6px;
-    background: rgba(0, 170, 0, 0.05);
-}
-
-.waiting-message p {
-    font-size: 1.2em;
-    margin: 10px 0;
+.play-button {
+    padding: 12px 40px;
+    border: 2px solid #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1em;
     font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
 }
 
-.waiting-subtext {
-    font-size: 0.9em !important;
-    color: #00aa00 !important;
-    margin-top: 10px !important;
+.play-button:hover {
+    background: rgba(0, 255, 0, 0.2);
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+}
+
+.play-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #111;
+    border: 2px solid #00ff00;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 380px;
+    width: 90%;
+    position: relative;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
+}
+
+.modal-content h3 {
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 1.1em;
+    letter-spacing: 2px;
+}
+
+.modal-close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: #00aa00;
+    font-size: 1.6em;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #00ff00;
+}
+
+.broadcaster-footer {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px dotted #003300;
+}
+
+.login-link {
+    color: #003300;
+    font-size: 0.75em;
+    text-decoration: none;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+    transition: color 0.3s ease;
+}
+
+.login-link:hover {
+    color: #00aa00;
 }
 
 .radio-control {
@@ -153,34 +219,14 @@ body {
     color: #00ff00;
     font-size: 1.2em;
     font-weight: bold;
-    cursor: pointer;
+    cursor: default;
+    pointer-events: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
     font-family: 'Courier New', monospace;
-}
-
-.toggle-switch::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 30% 30%, rgba(0, 255, 0, 0.1), transparent 70%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.toggle-switch:hover {
-    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.2);
-}
-
-.toggle-switch:active {
-    transform: scale(0.95);
 }
 
 .toggle-switch.on {
