@@ -23,7 +23,7 @@ RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 RADIO_STATE = {
     "is_playing": False,
     "last_toggled_time": time.time(),
-    "audio_duration": 201.552,  # Antoine Villoutreix - Berlin.mp3 duration in seconds
+    "audio_duration": 188.856,  # Al_Bint_El_Shalabiya.mp3 duration in seconds
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -195,6 +195,30 @@ def predict():
 
 
 
+# Broadcast password - change this to something secure!
+BROADCAST_PASSWORD = "broadcast"
+
+
+@app.route("/api/radio/auth", methods=["POST"])
+@app.route("/kyosky/api/radio/auth", methods=["POST"])
+def radio_auth():
+    """Authenticate broadcaster with password."""
+    data = request.json or {}
+    password = data.get("password", "")
+    
+    if password == BROADCAST_PASSWORD:
+        logger.info("Radio authentication successful")
+        return jsonify({
+            "authenticated": True,
+            "token": "validated"
+        })
+    else:
+        logger.warning("Radio authentication failed - incorrect password")
+        return jsonify({
+            "authenticated": False
+        })
+
+
 @app.route("/api/radio/state", methods=["GET"])
 @app.route("/kyosky/api/radio/state", methods=["GET"])
 def radio_state():
@@ -240,7 +264,7 @@ def radio_toggle():
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
     """Serve the radio audio file."""
-    audio_file = os.path.join(os.path.dirname(__file__), "..", "kleener_punker", "sounds", "Antoine Villoutreix - Berlin.mp3")
+    audio_file = os.path.join(os.path.dirname(__file__), "..", "radio", "Al_Bint_El_Shalabiya.mp3")
     
     if not os.path.exists(audio_file):
         logger.error(f"Audio file not found: {audio_file}")

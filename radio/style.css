@@ -45,6 +45,97 @@ body {
     font-style: italic;
 }
 
+.auth-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    border: 1px solid #00aa00;
+    border-radius: 6px;
+    background: rgba(0, 170, 0, 0.05);
+}
+
+.auth-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.auth-input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    background: rgba(0, 255, 0, 0.05);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.auth-input::placeholder {
+    color: #00aa00;
+}
+
+.auth-input:focus {
+    outline: none;
+    border-color: #00ff00;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.auth-button {
+    padding: 10px 20px;
+    border: 1px solid #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.auth-button:hover {
+    background: rgba(0, 255, 0, 0.2);
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+}
+
+.auth-button:active {
+    transform: scale(0.98);
+}
+
+.auth-status {
+    display: block;
+    font-size: 0.85em;
+    color: #00aa00;
+    text-align: center;
+}
+
+.auth-status.error {
+    color: #ff6600;
+}
+
+.auth-status.success {
+    color: #00ff00;
+}
+
+.waiting-message {
+    text-align: center;
+    padding: 30px 20px;
+    border: 1px dashed #00aa00;
+    border-radius: 6px;
+    background: rgba(0, 170, 0, 0.05);
+}
+
+.waiting-message p {
+    font-size: 1.2em;
+    margin: 10px 0;
+    font-weight: bold;
+}
+
+.waiting-subtext {
+    font-size: 0.9em !important;
+    color: #00aa00 !important;
+    margin-top: 10px !important;
+}
+
 .radio-control {
     display: flex;
     flex-direction: column;

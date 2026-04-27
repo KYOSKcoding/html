@@ -1,6 +1,6 @@
 /**
- * Radio Player - Synchronized playback across multiple clients
- * Polls server for state and syncs audio element to shared playback position
+ * Radio Player - Synchronized playback with password authentication
+ * Only broadcaster can toggle ON/OFF, listeners are passive
  */
 
 class RadioPlayer {
@@ -13,18 +13,31 @@ class RadioPlayer {
         this.errorMessage = document.getElementById('errorMessage');
         this.listenerCount = document.getElementById('listenerCount');
 
+        // Auth elements
+        this.authSection = document.getElementById('authSection');
+        this.passwordInput = document.getElementById('passwordInput');
+        this.authButton = document.getElementById('authButton');
+        this.authStatus = document.getElementById('authStatus');
+        this.waitingMessage = document.getElementById('waitingMessage');
+        this.waitingTime = document.getElementById('waitingTime');
+
         // API paths
         this.stateUrl = this.getApiUrl('/api/radio/state');
         this.toggleUrl = this.getApiUrl('/api/radio/toggle');
+        this.authUrl = this.getApiUrl('/api/radio/auth');
 
         // State
         this.isPlaying = false;
         this.elapsedTime = 0;
-        this.duration = 201.552;
-        this.pollInterval = 500; // milliseconds
+        this.duration = 188.856; // Al_Bint_El_Shalabiya.mp3 duration
+        this.pollInterval = 500;
         this.isPollActive = false;
         this.lastSyncTime = 0;
-        this.syncThreshold = 0.5; // seconds - threshold for sync correction
+        this.syncThreshold = 0.5;
+
+        // Auth state
+        this.isAuthenticated = false;
+        this.storedToken = localStorage.getItem('radio_auth_token');
 
         this.init();
     }
@@ -37,10 +50,8 @@ class RadioPlayer {
             window.location.hostname === '127.0.0.1';
 
         if (isLocal) {
-            // Local development - use localhost:5001
             return `http://localhost:5001${path}`;
         } else {
-            // Production - use relative path
             return path;
         }
     }
@@ -49,6 +60,11 @@ class RadioPlayer {
      * Initialize the radio player
      */
     init() {
+        this.authButton.addEventListener('click', () => this.handleAuth());
+        this.passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleAuth();
+        });
+
         this.toggleButton.addEventListener('click', () => this.handleToggle());
 
         // Prevent direct audio control
@@ -66,10 +82,84 @@ class RadioPlayer {
             }
         });
 
+        // Check if already authenticated
+        if (this.storedToken) {
+            this.isAuthenticated = true;
+            this.showBroadcasterControls();
+        } else {
+            this.showAuthSection();
+        }
+
         // Start polling for state updates
         this.startPolling();
+    }
 
-        this.showMessage('Connecting to server...', 'connecting');
+    /**
+     * Handle password authentication
+     */
+    async handleAuth() {
+        const password = this.passwordInput.value;
+
+        if (!password) {
+            this.showAuthError('Please enter a password');
+            return;
+        }
+
+        this.authButton.disabled = true;
+        this.authStatus.textContent = 'Verifying...';
+        this.authStatus.className = 'auth-status';
+
+        try {
+            const response = await fetch(this.authUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+
+            const data = await response.json();
+
+            if (data.authenticated) {
+                // Store token for future visits
+                localStorage.setItem('radio_auth_token', data.token);
+                this.isAuthenticated = true;
+                this.showBroadcasterControls();
+                this.authStatus.textContent = '✓ Authenticated as broadcaster!';
+                this.authStatus.className = 'auth-status success';
+            } else {
+                this.showAuthError('Incorrect password. Try again.');
+            }
+        } catch (error) {
+            this.showAuthError(`Auth error: ${error.message}`);
+        } finally {
+            this.authButton.disabled = false;
+        }
+    }
+
+    /**
+     * Show authentication section for non-broadcasters
+     */
+    showAuthSection() {
+        this.authSection.style.display = 'block';
+        this.toggleButton.style.display = 'none';
+        this.waitingMessage.style.display = 'block';
+        this.showMessage('Connecting...', 'connecting');
+    }
+
+    /**
+     * Show broadcaster controls
+     */
+    showBroadcasterControls() {
+        this.authSection.style.display = 'none';
+        this.toggleButton.style.display = 'flex';
+        this.waitingMessage.style.display = 'none';
+    }
+
+    /**
+     * Show authentication error
+     */
+    showAuthError(message) {
+        this.authStatus.textContent = '✗ ' + message;
+        this.authStatus.className = 'auth-status error';
     }
 
     /**
@@ -81,9 +171,7 @@ class RadioPlayer {
         try {
             const response = await fetch(this.toggleUrl, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                headers: { 'Content-Type': 'application/json' }
             });
 
             if (!response.ok) {
@@ -94,9 +182,7 @@ class RadioPlayer {
             this.isPlaying = data.is_playing;
             this.lastSyncTime = data.timestamp;
 
-            // Immediately fetch new state to sync
             await this.fetchState();
-
             this.clearError();
             this.updateUI();
         } catch (error) {
@@ -125,9 +211,7 @@ class RadioPlayer {
             this.duration = data.audio_duration;
             this.lastSyncTime = data.timestamp;
 
-            // Sync audio element to server position
             this.syncAudioElement();
-
             this.clearError();
             this.showMessage('Online', 'online');
 
@@ -146,26 +230,22 @@ class RadioPlayer {
     syncAudioElement() {
         if (!this.audioElement) return;
 
-        // Check if audio is ready
         if (this.audioElement.readyState < this.audioElement.HAVE_FUTURE_DATA) {
-            // Audio not ready, try again soon
             setTimeout(() => this.syncAudioElement(), 100);
             return;
         }
 
         const timeDiff = Math.abs(this.audioElement.currentTime - this.elapsedTime);
 
-        // If difference exceeds threshold, resync
         if (timeDiff > this.syncThreshold) {
             try {
                 this.audioElement.currentTime = this.elapsedTime;
-                console.log(`Synced audio to ${this.elapsedTime.toFixed(2)}s (was ${(this.audioElement.currentTime - timeDiff).toFixed(2)}s)`);
+                console.log(`Synced audio to ${this.elapsedTime.toFixed(2)}s`);
             } catch (error) {
                 console.warn('Could not set currentTime:', error);
             }
         }
 
-        // Play or pause based on server state
         if (this.isPlaying) {
             this.audioElement.play().catch(err => {
                 console.warn('Autoplay prevented by browser:', err);
@@ -176,52 +256,38 @@ class RadioPlayer {
     }
 
     /**
-     * Start polling for state updates
+     * Start periodic sync of audio element
      */
     startPolling() {
-        if (this.isPollActive) return;
-        this.isPollActive = true;
+        setInterval(() => this.syncAudioElement(), this.pollInterval);
+        setInterval(() => this.fetchState(), this.pollInterval);
 
-        const poll = async () => {
-            if (!this.isPollActive) return;
-
-            await this.fetchState();
-            this.updateUI();
-
-            // Schedule next poll
-            setTimeout(poll, this.pollInterval);
-        };
-
-        poll();
-    }
-
-    /**
-     * Stop polling for state updates
-     */
-    stopPolling() {
-        this.isPollActive = false;
+        // Update waiting time display
+        setInterval(() => {
+            this.waitingTime.textContent = this.formatTime(this.elapsedTime);
+        }, 500);
     }
 
     /**
      * Update UI elements to reflect current state
      */
     updateUI() {
-        // Update button state
-        if (this.isPlaying) {
-            this.toggleButton.classList.add('on');
-            this.toggleButton.classList.remove('off');
-            this.toggleButton.querySelector('.switch-inner').textContent = 'ON';
-        } else {
-            this.toggleButton.classList.add('off');
-            this.toggleButton.classList.remove('on');
-            this.toggleButton.querySelector('.switch-inner').textContent = 'OFF';
+        // Update button state (only for broadcasters)
+        if (this.isAuthenticated) {
+            if (this.isPlaying) {
+                this.toggleButton.classList.add('on');
+                this.toggleButton.classList.remove('off');
+                this.toggleButton.querySelector('.switch-inner').textContent = 'ON';
+            } else {
+                this.toggleButton.classList.add('off');
+                this.toggleButton.classList.remove('on');
+                this.toggleButton.querySelector('.switch-inner').textContent = 'OFF';
+            }
         }
 
         // Update time display
         this.timeDisplay.textContent = this.formatTime(this.elapsedTime);
-
-        // Update listener count (placeholder)
-        this.listenerCount.textContent = '∞';
+        this.waitingTime.textContent = this.formatTime(this.elapsedTime);
     }
 
     /**
@@ -262,11 +328,4 @@ class RadioPlayer {
 // Initialize radio player when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.radioPlayer = new RadioPlayer();
-});
-
-// Cleanup on page unload
-window.addEventListener('unload', () => {
-    if (window.radioPlayer) {
-        window.radioPlayer.stopPolling();
-    }
 });
