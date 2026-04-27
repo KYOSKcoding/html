@@ -211,6 +211,30 @@ body {
     color: #00ff00;
 }
 
+.logout-button {
+    padding: 6px 16px;
+    border: 1px solid #00aa00;
+    background: transparent;
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8em;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.logout-button:hover {
+    background: rgba(0, 170, 0, 0.15);
+    color: #00ff00;
+    border-color: #00ff00;
+}
+
+.logout-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .broadcaster-footer {
     text-align: center;
     margin-top: 20px;

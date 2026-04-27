@@ -5,6 +5,7 @@ import os
 import json
 import sys
 import logging
+import secrets
 import threading
 import time
 
@@ -19,13 +20,21 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 
-# Radio player state management
+# Radio player state management — broadcast defaults to ON
 RADIO_STATE = {
-    "is_playing": False,
+    "is_playing": True,
     "last_toggled_time": time.time(),
     "audio_duration": 27.096,  # Jingle_Macker.mp3 duration in seconds
 }
 RADIO_STATE_LOCK = threading.Lock()
+
+# Single-broadcaster session lock
+BROADCASTER_SESSION = {
+    "token": None,
+    "last_seen": 0.0,
+}
+BROADCASTER_LOCK = threading.Lock()
+BROADCASTER_TIMEOUT = 30  # seconds without heartbeat → session considered abandoned
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -199,64 +208,113 @@ def predict():
 BROADCAST_PASSWORD = "broadcast"
 
 
+def _session_active_locked():
+    """True if a broadcaster session is currently active. Caller must hold BROADCASTER_LOCK."""
+    if not BROADCASTER_SESSION["token"]:
+        return False
+    return (time.time() - BROADCASTER_SESSION["last_seen"]) < BROADCASTER_TIMEOUT
+
+
+def _validate_broadcaster_token(token):
+    """If token matches active session, refresh last_seen and return True."""
+    if not token:
+        return False
+    with BROADCASTER_LOCK:
+        if not _session_active_locked():
+            return False
+        if BROADCASTER_SESSION["token"] != token:
+            return False
+        BROADCASTER_SESSION["last_seen"] = time.time()
+        return True
+
+
 @app.route("/api/radio/auth", methods=["POST"])
 @app.route("/kyosky/api/radio/auth", methods=["POST"])
 def radio_auth():
-    """Authenticate broadcaster with password."""
+    """Authenticate broadcaster with password — only one active session allowed."""
     data = request.json or {}
     password = data.get("password", "")
-    
-    if password == BROADCAST_PASSWORD:
-        logger.info("Radio authentication successful")
-        return jsonify({
-            "authenticated": True,
-            "token": "validated"
-        })
-    else:
+
+    if password != BROADCAST_PASSWORD:
         logger.warning("Radio authentication failed - incorrect password")
-        return jsonify({
-            "authenticated": False
-        })
+        return jsonify({"authenticated": False, "error": "incorrect_password"}), 401
+
+    with BROADCASTER_LOCK:
+        if _session_active_locked():
+            logger.warning("Radio authentication denied - session already active")
+            return jsonify({
+                "authenticated": False,
+                "error": "session_active",
+                "message": "Another device is already logged in as broadcaster.",
+            }), 409
+        new_token = secrets.token_urlsafe(32)
+        BROADCASTER_SESSION["token"] = new_token
+        BROADCASTER_SESSION["last_seen"] = time.time()
+
+    logger.info("Radio authentication successful, session token issued")
+    return jsonify({"authenticated": True, "token": new_token})
+
+
+@app.route("/api/radio/logout", methods=["POST"])
+@app.route("/kyosky/api/radio/logout", methods=["POST"])
+def radio_logout():
+    """Release the broadcaster session."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    with BROADCASTER_LOCK:
+        if BROADCASTER_SESSION["token"] and BROADCASTER_SESSION["token"] == token:
+            BROADCASTER_SESSION["token"] = None
+            BROADCASTER_SESSION["last_seen"] = 0.0
+            logger.info("Broadcaster session released via logout")
+            return jsonify({"success": True})
+    return jsonify({"success": False, "error": "invalid_token"}), 401
 
 
 @app.route("/api/radio/state", methods=["GET"])
 @app.route("/kyosky/api/radio/state", methods=["GET"])
 def radio_state():
-    """Get current radio playback state and elapsed time."""
+    """Get current radio playback state. Acts as heartbeat if broadcaster token present."""
+    # Broadcaster heartbeat — refresh last_seen if token is valid
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if token:
+        _validate_broadcaster_token(token)
+
     with RADIO_STATE_LOCK:
         is_playing = RADIO_STATE["is_playing"]
         last_toggled_time = RADIO_STATE["last_toggled_time"]
         audio_duration = RADIO_STATE["audio_duration"]
-    
-    # Calculate elapsed time since play was toggled on
+
     if is_playing:
         elapsed_time = (time.time() - last_toggled_time) % audio_duration
     else:
         elapsed_time = 0
-    
-    logger.info(f"Radio state requested: playing={is_playing}, elapsed={elapsed_time:.2f}s")
+
     return jsonify({
         "is_playing": is_playing,
         "elapsed_time": elapsed_time,
         "audio_duration": audio_duration,
-        "timestamp": time.time()
+        "timestamp": time.time(),
     })
 
 
 @app.route("/api/radio/toggle", methods=["POST"])
 @app.route("/kyosky/api/radio/toggle", methods=["POST"])
 def radio_toggle():
-    """Toggle the radio playback state (on/off)."""
+    """Toggle the radio playback state — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        logger.warning("Radio toggle denied - invalid or expired session token")
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
     with RADIO_STATE_LOCK:
         RADIO_STATE["is_playing"] = not RADIO_STATE["is_playing"]
         RADIO_STATE["last_toggled_time"] = time.time()
         is_playing = RADIO_STATE["is_playing"]
-    
+
     logger.info(f"Radio toggled: now {'playing' if is_playing else 'stopped'}")
     return jsonify({
         "success": True,
         "is_playing": is_playing,
-        "timestamp": time.time()
+        "timestamp": time.time(),
     })
 
 

@@ -5,13 +5,13 @@ class RadioPlayer {
         this.toggleInner = this.toggleButton.querySelector('.switch-inner');
         this.listenButton = document.getElementById('listenButton');
         this.playButton = document.getElementById('playButton');
+        this.logoutButton = document.getElementById('logoutButton');
         this.statusText = document.getElementById('statusText');
         this.timeDisplay = document.getElementById('timeDisplay');
         this.errorContainer = document.getElementById('errorContainer');
         this.errorMessage = document.getElementById('errorMessage');
-        this.listenerCount = document.getElementById('listenerCount');
 
-        // Auth elements (in modal)
+        // Auth elements
         this.passwordInput = document.getElementById('passwordInput');
         this.authButton = document.getElementById('authButton');
         this.authStatus = document.getElementById('authStatus');
@@ -23,6 +23,7 @@ class RadioPlayer {
         this.stateUrl = this.getApiUrl('/api/radio/state');
         this.toggleUrl = this.getApiUrl('/api/radio/toggle');
         this.authUrl = this.getApiUrl('/api/radio/auth');
+        this.logoutUrl = this.getApiUrl('/api/radio/logout');
 
         // Server broadcast state
         this.isPlaying = false;
@@ -33,7 +34,6 @@ class RadioPlayer {
         // Local listen state
         this.isListening = false;
         this.audioReady = false;
-        this.syncThreshold = 2.0;
         this.needsInitialSync = true;
 
         // Idempotent UI tracking
@@ -42,11 +42,15 @@ class RadioPlayer {
         this._lastListenDisabled = null;
         this._lastStatusClass = null;
         this._lastStatusText = null;
+        this._lastAuthVisible = null;
+
+        // Race protection — handlePlay bumps stateSeq to invalidate stale poll responses
+        this._stateSeq = 0;
         this._fetchInFlight = false;
 
         // Auth
-        this.isAuthenticated = false;
-        this.storedToken = localStorage.getItem('radio_auth_token');
+        this.broadcasterToken = localStorage.getItem('radio_auth_token') || null;
+        this.isAuthenticated = !!this.broadcasterToken;
 
         this.init();
     }
@@ -57,6 +61,12 @@ class RadioPlayer {
         return isLocal ? `http://localhost:5001${path}` : `/kyosky${path}`;
     }
 
+    broadcasterHeaders(extra = {}) {
+        const h = { ...extra };
+        if (this.broadcasterToken) h['X-Broadcaster-Token'] = this.broadcasterToken;
+        return h;
+    }
+
     init() {
         this.authButton.addEventListener('click', () => this.handleAuth());
         this.passwordInput.addEventListener('keypress', (e) => {
@@ -64,6 +74,7 @@ class RadioPlayer {
         });
         this.listenButton.addEventListener('click', () => this.handleListen());
         this.playButton.addEventListener('click', () => this.handlePlay());
+        this.logoutButton.addEventListener('click', () => this.handleLogout());
         this.loginLink.addEventListener('click', (e) => {
             e.preventDefault();
             this.openModal();
@@ -73,11 +84,7 @@ class RadioPlayer {
             if (e.target === this.authModal) this.closeModal();
         });
 
-        if (this.storedToken) {
-            this.isAuthenticated = true;
-            this.showBroadcasterControls();
-        }
-
+        this.applyAuthVisibility();
         this.preloadAudio();
         this.startPolling();
     }
@@ -89,8 +96,7 @@ class RadioPlayer {
             const blob = await response.blob();
             this.audioElement.src = URL.createObjectURL(blob);
             this.audioReady = true;
-            this.listenButton.innerHTML = '&#9654; Listen';
-            // Disabled state will be reconciled by next updateUI
+            if (!this.isListening) this.listenButton.innerHTML = '&#9654; Listen';
             this._lastListenDisabled = null;
         } catch (error) {
             this.showError(`Failed to load audio: ${error.message}`);
@@ -125,8 +131,6 @@ class RadioPlayer {
                 this.audioElement.currentTime = this.elapsedTime % this.duration;
             } catch (e) {}
         }
-        // No periodic re-seeking: blob is in memory and the audio element
-        // loops natively, so let it run uninterrupted.
 
         if (this.audioElement.paused) {
             this.audioElement.play().catch(err => {
@@ -169,10 +173,13 @@ class RadioPlayer {
             const data = await response.json();
 
             if (data.authenticated) {
+                this.broadcasterToken = data.token;
                 localStorage.setItem('radio_auth_token', data.token);
                 this.isAuthenticated = true;
-                this.showBroadcasterControls();
+                this.applyAuthVisibility();
                 this.closeModal();
+            } else if (data.error === 'session_active') {
+                this.showAuthError(data.message || 'Another broadcaster is already logged in.');
             } else {
                 this.showAuthError('Incorrect password.');
             }
@@ -183,9 +190,47 @@ class RadioPlayer {
         }
     }
 
-    showBroadcasterControls() {
-        this.playButton.style.display = 'inline-block';
-        this.loginLink.style.display = 'none';
+    async handleLogout() {
+        this.logoutButton.disabled = true;
+        try {
+            await fetch(this.logoutUrl, {
+                method: 'POST',
+                headers: this.broadcasterHeaders()
+            });
+        } catch (e) {
+            // Best effort — clear local state regardless
+        }
+        this.clearLocalAuth();
+        this.logoutButton.disabled = false;
+    }
+
+    clearLocalAuth() {
+        this.broadcasterToken = null;
+        localStorage.removeItem('radio_auth_token');
+        this.isAuthenticated = false;
+        this.applyAuthVisibility();
+    }
+
+    applyAuthVisibility() {
+        if (this.isAuthenticated === this._lastAuthVisible) return;
+        this._lastAuthVisible = this.isAuthenticated;
+        if (this.isAuthenticated) {
+            this.playButton.style.display = 'inline-block';
+            this.logoutButton.style.display = 'inline-block';
+            this.loginLink.style.display = 'none';
+            this.refreshBroadcasterButtonLabel();
+        } else {
+            this.playButton.style.display = 'none';
+            this.logoutButton.style.display = 'none';
+            this.loginLink.style.display = 'inline-block';
+        }
+    }
+
+    refreshBroadcasterButtonLabel() {
+        if (!this.isAuthenticated) return;
+        this.playButton.innerHTML = this.isPlaying
+            ? '&#9632; Stop Broadcast'
+            : '&#9654; Start Broadcast';
     }
 
     showAuthError(message) {
@@ -195,12 +240,18 @@ class RadioPlayer {
 
     async handlePlay() {
         this.playButton.disabled = true;
+        this._stateSeq++;  // invalidate any in-flight periodic fetchState
 
         try {
             const response = await fetch(this.toggleUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' })
             });
+
+            if (response.status === 401) {
+                this.handleSessionExpired('Session expired or another broadcaster took over.');
+                return;
+            }
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
@@ -212,10 +263,12 @@ class RadioPlayer {
                 if (!this.audioElement.paused) this.audioElement.pause();
                 this.updateListenButton();
             }
+            if (this.isPlaying) {
+                this.needsInitialSync = true;
+                if (this.isListening) this.applyLocalAudio();
+            }
 
-            if (this.isPlaying) this.needsInitialSync = true;
-
-            await this.fetchState();
+            this.updateUI();
             this.clearError();
         } catch (error) {
             this.showError(`Failed to toggle: ${error.message}`);
@@ -224,15 +277,26 @@ class RadioPlayer {
         }
     }
 
+    handleSessionExpired(message) {
+        this.clearLocalAuth();
+        this.showError(message);
+    }
+
     async fetchState() {
         if (this._fetchInFlight) return;
         this._fetchInFlight = true;
+        const seq = this._stateSeq;
 
         try {
-            const response = await fetch(this.stateUrl);
+            const response = await fetch(this.stateUrl, {
+                headers: this.broadcasterHeaders()
+            });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const data = await response.json();
+            // Discard if a newer authoritative action (toggle) has bumped the sequence
+            if (seq !== this._stateSeq) return true;
+
             const wasPlaying = this.isPlaying;
             this.isPlaying = data.is_playing;
             this.elapsedTime = data.elapsed_time;
@@ -284,7 +348,6 @@ class RadioPlayer {
     }
 
     updateUI() {
-        // Toggle graphic — only update on transition
         if (this.isPlaying !== this._lastIsPlaying) {
             this._lastIsPlaying = this.isPlaying;
             if (this.isPlaying) {
@@ -296,15 +359,9 @@ class RadioPlayer {
                 this.toggleButton.classList.add('off');
                 this.toggleInner.textContent = 'OFF';
             }
-            // Broadcaster button label tracks isPlaying
-            if (this.isAuthenticated) {
-                this.playButton.innerHTML = this.isPlaying
-                    ? '&#9632; Stop Broadcast'
-                    : '&#9654; Start Broadcast';
-            }
+            this.refreshBroadcasterButtonLabel();
         }
 
-        // Listen button disabled state — only update on transition
         const listenDisabled = !this.isPlaying || !this.audioReady;
         if (listenDisabled !== this._lastListenDisabled) {
             this._lastListenDisabled = listenDisabled;
