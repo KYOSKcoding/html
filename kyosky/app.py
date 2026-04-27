@@ -34,7 +34,7 @@ BROADCASTER_SESSION = {
     "last_seen": 0.0,
 }
 BROADCASTER_LOCK = threading.Lock()
-BROADCASTER_TIMEOUT = 30  # seconds without heartbeat → session considered abandoned
+BROADCASTER_TIMEOUT = 300  # seconds without heartbeat before another device can take over
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -216,12 +216,16 @@ def _session_active_locked():
 
 
 def _validate_broadcaster_token(token):
-    """If token matches active session, refresh last_seen and return True."""
+    """If token matches the current session token, refresh last_seen and accept.
+
+    The timeout is only used at /auth time to decide whether a new device can
+    take over. Once a broadcaster holds the token, they keep using it until
+    someone else explicitly logs in or they log out. This avoids spurious
+    'session expired' kicks when polling pauses (background tab, sleep, etc).
+    """
     if not token:
         return False
     with BROADCASTER_LOCK:
-        if not _session_active_locked():
-            return False
         if BROADCASTER_SESSION["token"] != token:
             return False
         BROADCASTER_SESSION["last_seen"] = time.time()

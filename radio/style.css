@@ -284,30 +284,17 @@ body {
 
 .toggle-switch.on {
     background: radial-gradient(circle at 30% 30%, rgba(0, 255, 0, 0.4), rgba(0, 0, 0, 0.9));
-    box-shadow: 0 0 30px rgba(0, 255, 0, 0.7), inset 0 0 30px rgba(0, 255, 0, 0.3), 0 0 60px rgba(0, 255, 0, 0.3);
-    animation: pulse 1.5s infinite;
+    box-shadow: 0 0 25px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.25);
 }
 
 .toggle-switch.off {
-    opacity: 0.6;
+    opacity: 0.55;
 }
 
 .switch-inner {
     position: relative;
     z-index: 1;
     text-shadow: 0 0 10px #00ff00;
-}
-
-@keyframes pulse {
-
-    0%,
-    100% {
-        box-shadow: 0 0 30px rgba(0, 255, 0, 0.7), inset 0 0 30px rgba(0, 255, 0, 0.3);
-    }
-
-    50% {
-        box-shadow: 0 0 50px rgba(0, 255, 0, 0.9), inset 0 0 30px rgba(0, 255, 0, 0.5), 0 0 80px rgba(0, 255, 0, 0.4);
-    }
 }
 
 .status-indicator {

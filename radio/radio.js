@@ -97,7 +97,9 @@ class RadioPlayer {
             this.audioElement.src = URL.createObjectURL(blob);
             this.audioReady = true;
             if (!this.isListening) this.listenButton.innerHTML = '&#9654; Listen';
-            this._lastListenDisabled = null;
+            // Enable button now without waiting for next poll
+            this.listenButton.disabled = false;
+            this._lastListenDisabled = false;
         } catch (error) {
             this.showError(`Failed to load audio: ${error.message}`);
             this.listenButton.innerHTML = 'Audio unavailable';
@@ -134,9 +136,8 @@ class RadioPlayer {
 
         if (this.audioElement.paused) {
             this.audioElement.play().catch(err => {
-                console.warn('Autoplay prevented:', err);
-                this.isListening = false;
-                this.updateListenButton();
+                // Just log — don't auto-revert isListening, the user will retry if needed
+                console.warn('play() rejected:', err);
             });
         }
     }
@@ -258,15 +259,10 @@ class RadioPlayer {
             this.isPlaying = data.is_playing;
             this.fetchTimestamp = Date.now();
 
-            if (!this.isPlaying && this.isListening) {
-                this.isListening = false;
-                if (!this.audioElement.paused) this.audioElement.pause();
-                this.updateListenButton();
-            }
-            if (this.isPlaying) {
-                this.needsInitialSync = true;
-                if (this.isListening) this.applyLocalAudio();
-            }
+            // Local listen state is independent — let applyLocalAudio reconcile
+            // (it will pause audio if broadcast is now off, resume if back on).
+            if (this.isPlaying) this.needsInitialSync = true;
+            if (this.isListening) this.applyLocalAudio();
 
             this.updateUI();
             this.clearError();
@@ -362,7 +358,9 @@ class RadioPlayer {
             this.refreshBroadcasterButtonLabel();
         }
 
-        const listenDisabled = !this.isPlaying || !this.audioReady;
+        // Listen button is gated only by whether the audio blob has loaded —
+        // no longer toggles with broadcast state, so it stops flickering.
+        const listenDisabled = !this.audioReady;
         if (listenDisabled !== this._lastListenDisabled) {
             this._lastListenDisabled = listenDisabled;
             this.listenButton.disabled = listenDisabled;
