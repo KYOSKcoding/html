@@ -19,6 +19,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 
+# Radio player state management
+RADIO_STATE = {
+    "is_playing": False,
+    "last_toggled_time": time.time(),
+    "audio_duration": 201.552,  # Antoine Villoutreix - Berlin.mp3 duration in seconds
+}
+RADIO_STATE_LOCK = threading.Lock()
+
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"App root path: {app.root_path}")
@@ -64,6 +72,30 @@ def index():
         return jsonify({"error": "index.html not found"}), 404
     except Exception as e:
         logger.error(f"Error loading index.html: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/radio/")
+@app.route("/radio")
+def radio_page():
+    """Serve the radio player page."""
+    logger.info("GET /radio - Serving radio/index.html")
+    try:
+        radio_index_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "radio", "index.html"),
+            "/home/zef/Nextcloud6/webpage_kyo_sk/radio/index.html",
+        ]
+        
+        for path in radio_index_paths:
+            if os.path.exists(path):
+                content = open(path, "r", encoding="utf-8").read()
+                logger.info(f"Successfully loaded radio/index.html from {path}")
+                return content
+        
+        logger.error(f"radio/index.html not found in any of: {radio_index_paths}")
+        return jsonify({"error": "radio/index.html not found"}), 404
+    except Exception as e:
+        logger.error(f"Error loading radio/index.html: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -159,6 +191,49 @@ def predict():
 
         logger.error(f"Exception in predict: {e}", exc_info=True)
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
+
+
+@app.route("/api/radio/state", methods=["GET"])
+@app.route("/kyosky/api/radio/state", methods=["GET"])
+def radio_state():
+    """Get current radio playback state and elapsed time."""
+    with RADIO_STATE_LOCK:
+        is_playing = RADIO_STATE["is_playing"]
+        last_toggled_time = RADIO_STATE["last_toggled_time"]
+        audio_duration = RADIO_STATE["audio_duration"]
+    
+    # Calculate elapsed time since play was toggled on
+    if is_playing:
+        elapsed_time = (time.time() - last_toggled_time) % audio_duration
+    else:
+        elapsed_time = 0
+    
+    logger.info(f"Radio state requested: playing={is_playing}, elapsed={elapsed_time:.2f}s")
+    return jsonify({
+        "is_playing": is_playing,
+        "elapsed_time": elapsed_time,
+        "audio_duration": audio_duration,
+        "timestamp": time.time()
+    })
+
+
+@app.route("/api/radio/toggle", methods=["POST"])
+@app.route("/kyosky/api/radio/toggle", methods=["POST"])
+def radio_toggle():
+    """Toggle the radio playback state (on/off)."""
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["is_playing"] = not RADIO_STATE["is_playing"]
+        RADIO_STATE["last_toggled_time"] = time.time()
+        is_playing = RADIO_STATE["is_playing"]
+    
+    logger.info(f"Radio toggled: now {'playing' if is_playing else 'stopped'}")
+    return jsonify({
+        "success": True,
+        "is_playing": is_playing,
+        "timestamp": time.time()
+    })
 
 
 @app.route("/radar", methods=["POST"])
