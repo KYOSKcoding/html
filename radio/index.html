@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio - kyo.sk</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="radio-container">
+        <div class="radio-header">
+            <h1>Radio</h1>
+            <p class="radio-track">Antoine Villoutreix - Berlin</p>
+        </div>
+
+        <div class="radio-control">
+            <button id="toggleButton" class="toggle-switch off" aria-label="Toggle radio">
+                <span class="switch-inner">OFF</span>
+            </button>
+            <div class="status-indicator">
+                <span id="statusText" class="status-text">Offline</span>
+                <span id="timeDisplay" class="time-display">00:00</span>
+            </div>
+        </div>
+
+        <div class="radio-info">
+            <div class="info-item">
+                <span class="label">Duration:</span>
+                <span id="durationDisplay">3:21</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Synced:</span>
+                <span id="listenerCount">✓</span>
+            </div>
+        </div>
+
+        <div class="error-container" id="errorContainer" style="display: none;">
+            <div class="error-message" id="errorMessage"></div>
+        </div>
+
+        <!-- Hidden audio element for playback reference -->
+        <audio id="radioAudio" preload="metadata">
+            <source src="/api/radio/audio" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+
+    <script src="radio.js"></script>
+</body>
+
+</html>
