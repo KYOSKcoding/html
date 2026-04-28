@@ -119,6 +119,7 @@ class RadioPlayer {
             this.showError('Failed to load audio');
             this.listenButton.innerHTML = 'Audio unavailable';
         }, { once: true });
+        this.audioElement.load();
     }
 
     handleListen() {
@@ -480,7 +481,6 @@ class RadioPlayer {
         this.audioReady = false;
         this.needsInitialSync = true;
         if (!this.audioElement.paused) this.audioElement.pause();
-        // Force browser to treat this as a new resource (cache-bust with timestamp)
         this.audioElement.src = this.getApiUrl('/api/radio/audio') + '?t=' + Date.now();
         this.audioElement.addEventListener('canplay', () => {
             this.audioReady = true;
@@ -492,6 +492,7 @@ class RadioPlayer {
         this.audioElement.addEventListener('error', () => {
             this.showError('Failed to load audio after song switch');
         }, { once: true });
+        this.audioElement.load();
     }
 
     async loadSongs() {

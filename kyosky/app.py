@@ -38,6 +38,11 @@ def _scan_songs() -> list:
         for name in sorted(os.listdir(RADIO_DIR)):
             if name.lower().endswith(".mp3"):
                 path = os.path.join(RADIO_DIR, name)
+                # Strip executable bits — MP3s are never executable
+                current = os.stat(path).st_mode
+                if current & 0o111:
+                    os.chmod(path, current & ~0o111)
+                    logger.info(f"Fixed permissions on {name}")
                 songs.append({"filename": name, "duration": _get_mp3_duration(path)})
     except Exception as e:
         logger.error(f"Error scanning songs: {e}")
