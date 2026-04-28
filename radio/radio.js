@@ -5,6 +5,7 @@ class RadioPlayer {
         this.toggleInner = this.toggleButton.querySelector('.switch-inner');
         this.listenButton = document.getElementById('listenButton');
         this.playButton = document.getElementById('playButton');
+        this.liveButton = document.getElementById('liveButton');
         this.logoutButton = document.getElementById('logoutButton');
         this.statusText = document.getElementById('statusText');
         this.timeDisplay = document.getElementById('timeDisplay');
@@ -30,8 +31,12 @@ class RadioPlayer {
         this.logoutUrl = this.getApiUrl('/api/radio/logout');
         this.songsUrl = this.getApiUrl('/api/radio/songs');
         this.songSwitchUrl = this.getApiUrl('/api/radio/song');
+        this.liveStartUrl = this.getApiUrl('/api/radio/live/start');
+        this.liveStopUrl = this.getApiUrl('/api/radio/live/stop');
+        this.liveStreamUrl = this.getApiUrl('/api/radio/live-stream');
 
         // Server broadcast state
+        this.liveMode = false;
         this.isPlaying = false;
         this.elapsedTime = 0;
         this.duration = 27.096;
@@ -45,6 +50,7 @@ class RadioPlayer {
 
         // Idempotent UI tracking
         this._lastIsPlaying = null;
+        this._lastLiveMode = null;
         this._lastListening = null;
         this._lastListenDisabled = null;
         this._lastStatusClass = null;
@@ -89,6 +95,7 @@ class RadioPlayer {
         });
         this.listenButton.addEventListener('click', () => this.handleListen());
         this.playButton.addEventListener('click', () => this.handlePlay());
+        this.liveButton.addEventListener('click', () => this.handleLiveToggle());
         this.logoutButton.addEventListener('click', () => this.handleLogout());
         this.loginLink.addEventListener('click', (e) => {
             e.preventDefault();
@@ -239,11 +246,13 @@ class RadioPlayer {
         if (this.isAuthenticated) {
             this.playButton.style.display = 'inline-block';
             this.playButton.disabled = !this._playButtonReady;
+            this.liveButton.style.display = 'inline-block';
             this.logoutButton.style.display = 'inline-block';
             this.loginLink.style.display = 'none';
             this.refreshBroadcasterButtonLabel();
         } else {
             this.playButton.style.display = 'none';
+            this.liveButton.style.display = 'none';
             this.logoutButton.style.display = 'none';
             this.loginLink.style.display = 'inline-block';
         }
@@ -315,6 +324,11 @@ class RadioPlayer {
             // Discard if a newer authoritative action (toggle) has bumped the sequence
             if (seq !== this._stateSeq) return true;
 
+            const wasLiveFetch = this.liveMode;
+            this.liveMode = data.live_mode || false;
+            if (!wasLiveFetch && this.liveMode) this.switchToLive();
+            else if (wasLiveFetch && !this.liveMode) this.switchToFile();
+
             const wasPlaying = this.isPlaying;
             this.isPlaying = data.is_playing;
             this.elapsedTime = data.elapsed_time;
@@ -351,8 +365,17 @@ class RadioPlayer {
             try {
                 const data = JSON.parse(event.data);
 
+                // Live mode change — switch audio source for all listeners
+                const wasLive = this.liveMode;
+                this.liveMode = data.live_mode || false;
+                if (!wasLive && this.liveMode) {
+                    this.switchToLive();
+                } else if (wasLive && !this.liveMode) {
+                    this.switchToFile();
+                }
+
                 // Song changed — reload audio from server (elapsed resets to near 0)
-                if (data.current_song && data.current_song !== this.currentSong) {
+                if (!this.liveMode && data.current_song && data.current_song !== this.currentSong) {
                     this.currentSong = data.current_song;
                     this.highlightActiveSong(data.current_song);
                     this.reloadAudio();
@@ -438,6 +461,14 @@ class RadioPlayer {
                 this.toggleInner.textContent = 'OFF';
             }
             this.refreshBroadcasterButtonLabel();
+        }
+
+        if (this.liveMode !== this._lastLiveMode) {
+            this._lastLiveMode = this.liveMode;
+            if (this.isAuthenticated) {
+                this.liveButton.innerHTML = this.liveMode ? '&#9679; Live ON' : '&#9679; Go Live';
+                this.liveButton.classList.toggle('active', this.liveMode);
+            }
         }
 
         // Listen button is gated only by whether the audio blob has loaded —
@@ -543,6 +574,45 @@ class RadioPlayer {
             // Revert highlight on failure
             this.highlightActiveSong(this.currentSong);
         }
+    }
+
+    async handleLiveToggle() {
+        this.liveButton.disabled = true;
+        try {
+            const url = this.liveMode ? this.liveStopUrl : this.liveStartUrl;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: this.broadcasterHeaders()
+            });
+            if (response.status === 401) {
+                this.handleSessionExpired('Session expired.');
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            // SSE will deliver the live_mode change to all clients
+        } catch (e) {
+            this.showError(`Live toggle failed: ${e.message}`);
+        } finally {
+            this.liveButton.disabled = false;
+        }
+    }
+
+    switchToLive() {
+        this.audioReady = false;
+        if (!this.audioElement.paused) this.audioElement.pause();
+        this.audioElement.src = this.liveStreamUrl;
+        this.audioElement.addEventListener('canplay', () => {
+            this.audioReady = true;
+            this.listenButton.disabled = false;
+            this._lastListenDisabled = false;
+            this.updateListenButton();
+            if (this.isListening) this.audioElement.play().catch(() => {});
+        }, { once: true });
+        this.audioElement.load();
+    }
+
+    switchToFile() {
+        this.reloadAudio();
     }
 
     highlightActiveSong(filename) {

@@ -161,6 +161,35 @@ body {
     cursor: not-allowed;
 }
 
+.live-button {
+    padding: 12px 40px;
+    border: 2px solid #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1em;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+}
+
+.live-button:hover {
+    background: rgba(255, 68, 68, 0.2);
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+}
+
+.live-button.active {
+    background: rgba(255, 68, 68, 0.25);
+    box-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+}
+
+.live-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;

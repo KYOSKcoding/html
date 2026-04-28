@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response, redirect, url_for
 from flask_cors import CORS
 import subprocess
 import os
@@ -69,6 +69,7 @@ RADIO_STATE = {
     "last_toggled_time": time.time(),
     "current_song": _DEFAULT_SONG,
     "audio_duration": _default_duration,
+    "live_mode": False,
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -85,6 +86,9 @@ BROADCASTER_TIMEOUT = (
 # SSE (Server-Sent Events) — per-client queues for instant push on state change
 SSE_CLIENT_QUEUES: dict = {}  # thread_id → queue.Queue
 SSE_CLIENTS_LOCK = threading.Lock()
+
+# Live stream buffer — chunks pushed by PUT /api/radio/stream, pulled by GET /api/radio/live-stream
+LIVE_STREAM_BUFFER: _queue.Queue = _queue.Queue(maxsize=256)
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -332,12 +336,14 @@ def _current_state_dict() -> dict:
         last_toggled_time = RADIO_STATE["last_toggled_time"]
         audio_duration = RADIO_STATE["audio_duration"]
         current_song = RADIO_STATE["current_song"]
+        live_mode = RADIO_STATE["live_mode"]
     elapsed = (time.time() - last_toggled_time) % audio_duration if is_playing else 0
     return {
         "is_playing": is_playing,
         "elapsed_time": elapsed,
         "audio_duration": audio_duration,
         "current_song": current_song,
+        "live_mode": live_mode,
         "timestamp": time.time(),
     }
 
@@ -393,9 +399,14 @@ def radio_toggle():
 @app.route("/api/radio/audio")
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
-    """Serve the currently active song."""
+    """Serve the currently active song, or redirect to live stream when live_mode is on."""
     with RADIO_STATE_LOCK:
         current_song = RADIO_STATE["current_song"]
+        live_mode = RADIO_STATE["live_mode"]
+
+    if live_mode:
+        return redirect(url_for("serve_live_stream"))
+
     audio_file = os.path.join(RADIO_DIR, current_song)
 
     if not os.path.exists(audio_file):
@@ -404,6 +415,73 @@ def radio_audio():
 
     logger.info(f"Serving audio file: {audio_file}")
     return send_file(audio_file, mimetype="audio/mpeg")
+
+
+@app.route("/api/radio/live/start", methods=["POST"])
+@app.route("/kyosky/api/radio/live/start", methods=["POST"])
+def live_start():
+    """Switch all listeners to live stream — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["live_mode"] = True
+    logger.info("Live mode enabled")
+    _notify_sse_clients(_current_state_dict())
+    return jsonify({"live_mode": True})
+
+
+@app.route("/api/radio/live/stop", methods=["POST"])
+@app.route("/kyosky/api/radio/live/stop", methods=["POST"])
+def live_stop():
+    """Return all listeners to recorded audio — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["live_mode"] = False
+    logger.info("Live mode disabled")
+    _notify_sse_clients(_current_state_dict())
+    return jsonify({"live_mode": False})
+
+
+@app.route("/api/radio/stream", methods=["PUT"])
+@app.route("/kyosky/api/radio/stream", methods=["PUT"])
+def receive_stream():
+    """Accept chunked audio upload from broadcaster (ffmpeg/curl) and buffer it."""
+    token = request.headers.get("X-Auth-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    chunk_size = 4096
+    while True:
+        chunk = request.stream.read(chunk_size)
+        if not chunk:
+            break
+        try:
+            LIVE_STREAM_BUFFER.put_nowait(chunk)
+        except _queue.Full:
+            LIVE_STREAM_BUFFER.get_nowait()
+            LIVE_STREAM_BUFFER.put_nowait(chunk)
+    return "", 200
+
+
+@app.route("/api/radio/live-stream")
+@app.route("/kyosky/api/radio/live-stream")
+def serve_live_stream():
+    """Relay buffered live audio chunks to a browser listener."""
+    def generate():
+        while True:
+            try:
+                chunk = LIVE_STREAM_BUFFER.get(timeout=10)
+                yield chunk
+            except _queue.Empty:
+                break
+
+    return Response(
+        generate(),
+        mimetype="audio/mpeg",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.route("/api/radio/songs", methods=["GET"])
