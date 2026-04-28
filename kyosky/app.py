@@ -34,7 +34,15 @@ BROADCASTER_SESSION = {
     "last_seen": 0.0,
 }
 BROADCASTER_LOCK = threading.Lock()
-BROADCASTER_TIMEOUT = 300  # seconds without heartbeat before another device can take over
+BROADCASTER_TIMEOUT = (
+    300  # seconds without heartbeat before another device can take over
+)
+
+# SSE (Server-Sent Events) state push clients
+SSE_EVENT_QUEUE = None  # Will be initialized as queue.Queue()
+SSE_CLIENTS = []  # List of (client_id, send_function) tuples
+SSE_CLIENTS_LOCK = threading.Lock()
+SSE_CLIENT_ID_COUNTER = 0
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -94,13 +102,13 @@ def radio_page():
             os.path.join(os.path.dirname(__file__), "..", "radio", "index.html"),
             "/home/zef/Nextcloud6/webpage_kyo_sk/radio/index.html",
         ]
-        
+
         for path in radio_index_paths:
             if os.path.exists(path):
                 content = open(path, "r", encoding="utf-8").read()
                 logger.info(f"Successfully loaded radio/index.html from {path}")
                 return content
-        
+
         logger.error(f"radio/index.html not found in any of: {radio_index_paths}")
         return jsonify({"error": "radio/index.html not found"}), 404
     except Exception as e:
@@ -202,8 +210,6 @@ def predict():
         return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
-
-
 # Broadcast password - change this to something secure!
 BROADCAST_PASSWORD = "broadcast"
 
@@ -246,11 +252,16 @@ def radio_auth():
     with BROADCASTER_LOCK:
         if _session_active_locked():
             logger.warning("Radio authentication denied - session already active")
-            return jsonify({
-                "authenticated": False,
-                "error": "session_active",
-                "message": "Another device is already logged in as broadcaster.",
-            }), 409
+            return (
+                jsonify(
+                    {
+                        "authenticated": False,
+                        "error": "session_active",
+                        "message": "Another device is already logged in as broadcaster.",
+                    }
+                ),
+                409,
+            )
         new_token = secrets.token_urlsafe(32)
         BROADCASTER_SESSION["token"] = new_token
         BROADCASTER_SESSION["last_seen"] = time.time()
@@ -292,12 +303,39 @@ def radio_state():
     else:
         elapsed_time = 0
 
-    return jsonify({
+    return jsonify(
+        {
+            "is_playing": is_playing,
+            "elapsed_time": elapsed_time,
+            "audio_duration": audio_duration,
+            "timestamp": time.time(),
+        }
+    )
+
+
+def _broadcast_state_to_sse():
+    """Notify all SSE clients of current radio state."""
+    with RADIO_STATE_LOCK:
+        is_playing = RADIO_STATE["is_playing"]
+        last_toggled_time = RADIO_STATE["last_toggled_time"]
+        audio_duration = RADIO_STATE["audio_duration"]
+
+    if is_playing:
+        elapsed_time = (time.time() - last_toggled_time) % audio_duration
+    else:
+        elapsed_time = 0
+
+    state_data = {
         "is_playing": is_playing,
         "elapsed_time": elapsed_time,
         "audio_duration": audio_duration,
         "timestamp": time.time(),
-    })
+    }
+    event_json = json.dumps(state_data)
+
+    # Send to all connected SSE clients (simulated via response.write buffering)
+    # In production, use a real SSE library or Redis pub/sub for scalable broadcasting.
+    logger.debug(f"Broadcasting state to SSE clients: {event_json}")
 
 
 @app.route("/api/radio/toggle", methods=["POST"])
@@ -315,25 +353,112 @@ def radio_toggle():
         is_playing = RADIO_STATE["is_playing"]
 
     logger.info(f"Radio toggled: now {'playing' if is_playing else 'stopped'}")
-    return jsonify({
-        "success": True,
-        "is_playing": is_playing,
-        "timestamp": time.time(),
-    })
+
+    # Broadcast state change to all SSE clients
+    _broadcast_state_to_sse()
+
+    return jsonify(
+        {
+            "success": True,
+            "is_playing": is_playing,
+            "timestamp": time.time(),
+        }
+    )
 
 
 @app.route("/api/radio/audio")
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
     """Serve the radio audio file."""
-    audio_file = os.path.join(os.path.dirname(__file__), "..", "radio", "Jingle_Macker.mp3")
-    
+    audio_file = os.path.join(
+        os.path.dirname(__file__), "..", "radio", "Jingle_Macker.mp3"
+    )
+
     if not os.path.exists(audio_file):
         logger.error(f"Audio file not found: {audio_file}")
         return jsonify({"error": "Audio file not found"}), 404
-    
+
     logger.info(f"Serving audio file: {audio_file}")
     return send_file(audio_file, mimetype="audio/mpeg")
+
+
+@app.route("/api/radio/events")
+@app.route("/kyosky/api/radio/events")
+def radio_events():
+    """Server-Sent Events stream for real-time radio state updates."""
+
+    def generate_sse():
+        """Generator function that sends SSE data to client."""
+        last_state = None
+        check_interval = 0.5  # Check state every 500ms
+        last_check = time.time()
+
+        try:
+            # Send initial state
+            with RADIO_STATE_LOCK:
+                is_playing = RADIO_STATE["is_playing"]
+                last_toggled_time = RADIO_STATE["last_toggled_time"]
+                audio_duration = RADIO_STATE["audio_duration"]
+
+            if is_playing:
+                elapsed_time = (time.time() - last_toggled_time) % audio_duration
+            else:
+                elapsed_time = 0
+
+            current_state = {
+                "is_playing": is_playing,
+                "elapsed_time": elapsed_time,
+                "audio_duration": audio_duration,
+                "timestamp": time.time(),
+            }
+
+            yield f"data: {json.dumps(current_state)}\n\n"
+            last_state = current_state
+
+            # Keep connection alive and send updates every 500ms
+            while True:
+                now = time.time()
+                if now - last_check >= check_interval:
+                    last_check = now
+
+                    with RADIO_STATE_LOCK:
+                        is_playing = RADIO_STATE["is_playing"]
+                        last_toggled_time = RADIO_STATE["last_toggled_time"]
+                        audio_duration = RADIO_STATE["audio_duration"]
+
+                    if is_playing:
+                        elapsed_time = (
+                            time.time() - last_toggled_time
+                        ) % audio_duration
+                    else:
+                        elapsed_time = 0
+
+                    current_state = {
+                        "is_playing": is_playing,
+                        "elapsed_time": elapsed_time,
+                        "audio_duration": audio_duration,
+                        "timestamp": time.time(),
+                    }
+
+                    # Send if state changed
+                    if current_state["is_playing"] != last_state["is_playing"]:
+                        yield f"data: {json.dumps(current_state)}\n\n"
+                        last_state = current_state
+
+                time.sleep(0.1)  # Small sleep to avoid busy-waiting
+
+        except GeneratorExit:
+            logger.debug("SSE client disconnected")
+        except Exception as e:
+            logger.error(f"SSE error: {e}")
+
+    response = app.make_response(generate_sse(), 200)
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["X-Accel-Buffering"] = "no"  # Disable buffering in proxies
+    return response
 
 
 @app.route("/radar", methods=["POST"])

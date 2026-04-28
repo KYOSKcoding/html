@@ -48,6 +48,9 @@ class RadioPlayer {
         this._stateSeq = 0;
         this._fetchInFlight = false;
 
+        // SSE connection
+        this.eventSource = null;
+
         // Auth
         this.broadcasterToken = localStorage.getItem('radio_auth_token') || null;
         this.isAuthenticated = !!this.broadcasterToken;
@@ -86,7 +89,8 @@ class RadioPlayer {
 
         this.applyAuthVisibility();
         this.preloadAudio();
-        this.startPolling();
+        this.startSSE();
+        this.startTimeDisplayUpdate();
     }
 
     async preloadAudio() {
@@ -131,7 +135,7 @@ class RadioPlayer {
             this.needsInitialSync = false;
             try {
                 this.audioElement.currentTime = this.elapsedTime % this.duration;
-            } catch (e) {}
+            } catch (e) { }
         }
 
         if (this.audioElement.paused) {
@@ -319,9 +323,59 @@ class RadioPlayer {
         }
     }
 
-    startPolling() {
-        setInterval(() => this.fetchState(), 2000);
+    startSSE() {
+        const eventSourceUrl = this.getApiUrl('/api/radio/events');
+        console.log('Connecting to SSE:', eventSourceUrl);
+
+        this.eventSource = new EventSource(eventSourceUrl);
+
+        this.eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('SSE state update:', data);
+
+                const wasPlaying = this.isPlaying;
+                this.isPlaying = data.is_playing;
+                this.elapsedTime = data.elapsed_time;
+                this.duration = data.audio_duration;
+                this.fetchTimestamp = Date.now();
+
+                // Set initial sync flag if transitioning from stopped to playing
+                if (!wasPlaying && this.isPlaying) {
+                    this.needsInitialSync = true;
+                }
+
+                // Pause audio if broadcast stopped
+                if (wasPlaying && !this.isPlaying && this.isListening) {
+                    if (!this.audioElement.paused) this.audioElement.pause();
+                }
+
+                // Apply local audio sync if listening
+                if (this.isListening) this.applyLocalAudio();
+
+                this.clearError();
+                this.setStatus('Online', 'online');
+                this.updateUI();
+            } catch (error) {
+                console.error('Error parsing SSE data:', error);
+            }
+        };
+
+        this.eventSource.onerror = (error) => {
+            console.error('SSE connection error:', error);
+            this.setStatus('Offline', 'error');
+            // EventSource will auto-reconnect
+        };
+    }
+
+    startTimeDisplayUpdate() {
         setInterval(() => this.updateTimeDisplay(), 100);
+    }
+
+    startPolling() {
+        // DEPRECATED: Replaced with SSE. This method kept for reference.
+        // setInterval(() => this.fetchState(), 2000);
+        // setInterval(() => this.updateTimeDisplay(), 100);
     }
 
     updateTimeDisplay() {
@@ -394,8 +448,23 @@ class RadioPlayer {
             this.errorMessage.textContent = '';
         }
     }
+
+    disconnect() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = null;
+            console.log('SSE connection closed');
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     window.radioPlayer = new RadioPlayer();
+});
+
+// Clean up SSE connection on page unload
+window.addEventListener('beforeunload', () => {
+    if (window.radioPlayer) {
+        window.radioPlayer.disconnect();
+    }
 });
