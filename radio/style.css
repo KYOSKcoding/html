@@ -235,6 +235,60 @@ body {
     cursor: not-allowed;
 }
 
+.song-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px dotted #003300;
+}
+
+.song-label {
+    font-size: 0.75em;
+    color: #00aa00;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+
+.song-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.song-btn {
+    padding: 6px 14px;
+    border: 1px solid #00aa00;
+    background: transparent;
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8em;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.song-btn:hover {
+    background: rgba(0, 170, 0, 0.15);
+    color: #00ff00;
+    border-color: #00ff00;
+}
+
+.song-btn.active {
+    background: rgba(0, 255, 0, 0.15);
+    color: #00ff00;
+    border-color: #00ff00;
+    box-shadow: 0 0 6px rgba(0, 255, 0, 0.3);
+}
+
+.song-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .broadcaster-footer {
     text-align: center;
     margin-top: 20px;

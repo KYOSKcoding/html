@@ -19,17 +19,24 @@ class RadioPlayer {
         this.authModal = document.getElementById('authModal');
         this.modalClose = document.getElementById('modalClose');
 
+        // Song selector elements (broadcaster only)
+        this.songSection = document.getElementById('songSection');
+        this.songButtonsEl = document.getElementById('songButtons');
+
         // API paths
         this.stateUrl = this.getApiUrl('/api/radio/state');
         this.toggleUrl = this.getApiUrl('/api/radio/toggle');
         this.authUrl = this.getApiUrl('/api/radio/auth');
         this.logoutUrl = this.getApiUrl('/api/radio/logout');
+        this.songsUrl = this.getApiUrl('/api/radio/songs');
+        this.songSwitchUrl = this.getApiUrl('/api/radio/song');
 
         // Server broadcast state
         this.isPlaying = false;
         this.elapsedTime = 0;
         this.duration = 27.096;
         this.fetchTimestamp = Date.now();
+        this.currentSong = null;  // updated from SSE
 
         // Local listen state
         this.isListening = false;
@@ -97,6 +104,7 @@ class RadioPlayer {
         this.startSSE();
         this.startTimeDisplayUpdate();
         this.startHeartbeat();
+        if (this.isAuthenticated) this.loadSongs();
     }
 
     preloadAudio() {
@@ -185,6 +193,7 @@ class RadioPlayer {
                 localStorage.setItem('radio_auth_token', data.token);
                 this.isAuthenticated = true;
                 this.applyAuthVisibility();
+                this.loadSongs();
                 if (data.took_over) {
                     this.showAuthError('Warning: previous broadcaster session ended.');
                     setTimeout(() => this.closeModal(), 2000);
@@ -220,6 +229,7 @@ class RadioPlayer {
         localStorage.removeItem('radio_auth_token');
         this.isAuthenticated = false;
         this.applyAuthVisibility();
+        this.songSection.style.display = 'none';
     }
 
     applyAuthVisibility() {
@@ -339,7 +349,13 @@ class RadioPlayer {
         this.eventSource.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                console.log('SSE state update:', data);
+
+                // Song changed — reload audio from server (elapsed resets to near 0)
+                if (data.current_song && data.current_song !== this.currentSong) {
+                    this.currentSong = data.current_song;
+                    this.highlightActiveSong(data.current_song);
+                    this.reloadAudio();
+                }
 
                 const wasPlaying = this.isPlaying;
                 this.isPlaying = data.is_playing;
@@ -347,17 +363,14 @@ class RadioPlayer {
                 this.duration = data.audio_duration;
                 this.fetchTimestamp = Date.now();
 
-                // Set initial sync flag if transitioning from stopped to playing
                 if (!wasPlaying && this.isPlaying) {
                     this.needsInitialSync = true;
                 }
 
-                // Pause audio if broadcast stopped
                 if (wasPlaying && !this.isPlaying && this.isListening) {
                     if (!this.audioElement.paused) this.audioElement.pause();
                 }
 
-                // Apply local audio sync if listening
                 if (this.isListening) this.applyLocalAudio();
 
                 this.clearError();
@@ -460,6 +473,80 @@ class RadioPlayer {
         if (this.errorContainer.style.display !== 'none') {
             this.errorContainer.style.display = 'none';
             this.errorMessage.textContent = '';
+        }
+    }
+
+    reloadAudio() {
+        this.audioReady = false;
+        this.needsInitialSync = true;
+        if (!this.audioElement.paused) this.audioElement.pause();
+        // Force browser to treat this as a new resource (cache-bust with timestamp)
+        this.audioElement.src = this.getApiUrl('/api/radio/audio') + '?t=' + Date.now();
+        this.audioElement.addEventListener('canplay', () => {
+            this.audioReady = true;
+            this.listenButton.disabled = false;
+            this._lastListenDisabled = false;
+            this.updateListenButton();
+            if (this.isListening && this.isPlaying) this.applyLocalAudio();
+        }, { once: true });
+        this.audioElement.addEventListener('error', () => {
+            this.showError('Failed to load audio after song switch');
+        }, { once: true });
+    }
+
+    async loadSongs() {
+        try {
+            const response = await fetch(this.songsUrl);
+            if (!response.ok) return;
+            const songs = await response.json();
+            this.renderSongButtons(songs);
+            this.songSection.style.display = 'block';
+        } catch (e) {
+            console.warn('Could not load song list:', e);
+        }
+    }
+
+    renderSongButtons(songs) {
+        this.songButtonsEl.innerHTML = '';
+        for (const song of songs) {
+            const btn = document.createElement('button');
+            btn.className = 'song-btn';
+            btn.dataset.filename = song.filename;
+            // Display name: strip extension, replace underscores with spaces
+            btn.textContent = song.filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+            btn.title = song.filename;
+            if (song.filename === this.currentSong) btn.classList.add('active');
+            btn.addEventListener('click', () => this.handleSongSwitch(song.filename));
+            this.songButtonsEl.appendChild(btn);
+        }
+    }
+
+    async handleSongSwitch(filename) {
+        if (filename === this.currentSong) return;
+        // Optimistically mark active so UI is instant
+        this.highlightActiveSong(filename);
+        try {
+            const response = await fetch(this.songSwitchUrl, {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ filename })
+            });
+            if (response.status === 401) {
+                this.handleSessionExpired('Session expired.');
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            // SSE will deliver the state update and call reloadAudio() for all clients
+        } catch (e) {
+            this.showError(`Song switch failed: ${e.message}`);
+            // Revert highlight on failure
+            this.highlightActiveSong(this.currentSong);
+        }
+    }
+
+    highlightActiveSong(filename) {
+        for (const btn of this.songButtonsEl.querySelectorAll('.song-btn')) {
+            btn.classList.toggle('active', btn.dataset.filename === filename);
         }
     }
 

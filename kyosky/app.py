@@ -9,6 +9,7 @@ import secrets
 import threading
 import time
 import queue as _queue
+from mutagen.mp3 import MP3 as _MP3
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -20,12 +21,38 @@ CORS(app)  # Enable CORS for all routes
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
+RADIO_DIR = os.path.join(BASE_DIR, "..", "radio")
+
+
+def _get_mp3_duration(filepath: str) -> float:
+    try:
+        return _MP3(filepath).info.length
+    except Exception:
+        return 0.0
+
+
+def _scan_songs() -> list:
+    """Return sorted list of {filename, duration} dicts for all MP3s in RADIO_DIR."""
+    songs = []
+    try:
+        for name in sorted(os.listdir(RADIO_DIR)):
+            if name.lower().endswith(".mp3"):
+                path = os.path.join(RADIO_DIR, name)
+                songs.append({"filename": name, "duration": _get_mp3_duration(path)})
+    except Exception as e:
+        logger.error(f"Error scanning songs: {e}")
+    return songs
+
+
+_DEFAULT_SONG = "Jingle_Macker.mp3"
+_default_duration = _get_mp3_duration(os.path.join(RADIO_DIR, _DEFAULT_SONG))
 
 # Radio player state management — broadcast defaults to ON
 RADIO_STATE = {
     "is_playing": True,
     "last_toggled_time": time.time(),
-    "audio_duration": 27.096,  # Jingle_Macker.mp3 duration in seconds
+    "current_song": _DEFAULT_SONG,
+    "audio_duration": _default_duration,
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -288,11 +315,13 @@ def _current_state_dict() -> dict:
         is_playing = RADIO_STATE["is_playing"]
         last_toggled_time = RADIO_STATE["last_toggled_time"]
         audio_duration = RADIO_STATE["audio_duration"]
+        current_song = RADIO_STATE["current_song"]
     elapsed = (time.time() - last_toggled_time) % audio_duration if is_playing else 0
     return {
         "is_playing": is_playing,
         "elapsed_time": elapsed,
         "audio_duration": audio_duration,
+        "current_song": current_song,
         "timestamp": time.time(),
     }
 
@@ -348,10 +377,10 @@ def radio_toggle():
 @app.route("/api/radio/audio")
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
-    """Serve the radio audio file."""
-    audio_file = os.path.join(
-        os.path.dirname(__file__), "..", "radio", "Jingle_Macker.mp3"
-    )
+    """Serve the currently active song."""
+    with RADIO_STATE_LOCK:
+        current_song = RADIO_STATE["current_song"]
+    audio_file = os.path.join(RADIO_DIR, current_song)
 
     if not os.path.exists(audio_file):
         logger.error(f"Audio file not found: {audio_file}")
@@ -359,6 +388,47 @@ def radio_audio():
 
     logger.info(f"Serving audio file: {audio_file}")
     return send_file(audio_file, mimetype="audio/mpeg")
+
+
+@app.route("/api/radio/songs", methods=["GET"])
+@app.route("/kyosky/api/radio/songs", methods=["GET"])
+def radio_songs():
+    """List all available MP3 files with durations."""
+    return jsonify(_scan_songs())
+
+
+@app.route("/api/radio/song", methods=["POST"])
+@app.route("/kyosky/api/radio/song", methods=["POST"])
+def radio_song_switch():
+    """Switch the active song — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    filename = data.get("filename", "")
+
+    # Validate: only allow plain filenames (no path traversal)
+    if not filename or os.path.basename(filename) != filename or not filename.lower().endswith(".mp3"):
+        return jsonify({"success": False, "error": "invalid_filename"}), 400
+
+    audio_file = os.path.join(RADIO_DIR, filename)
+    if not os.path.exists(audio_file):
+        return jsonify({"success": False, "error": "file_not_found"}), 404
+
+    duration = _get_mp3_duration(audio_file)
+
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["current_song"] = filename
+        RADIO_STATE["audio_duration"] = duration
+        RADIO_STATE["last_toggled_time"] = time.time()
+
+    logger.info(f"Song switched to: {filename} ({duration:.1f}s)")
+
+    state = _current_state_dict()
+    _notify_sse_clients(state)
+
+    return jsonify({"success": True, "current_song": filename, "duration": duration})
 
 
 @app.route("/api/radio/events")

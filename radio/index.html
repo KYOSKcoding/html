@@ -51,11 +51,17 @@
             <div class="error-message" id="errorMessage"></div>
         </div>
 
+        <!-- Song selector (broadcaster only) -->
+        <div id="songSection" class="song-section" style="display: none;">
+            <div class="song-label">Song</div>
+            <div id="songButtons" class="song-buttons"></div>
+        </div>
+
         <div class="broadcaster-footer">
             <a id="loginLink" class="login-link" href="#">Broadcaster</a>
         </div>
 
-        <audio id="radioAudio" preload="auto" loop></audio>
+        <audio id="radioAudio" preload="none" loop></audio>
     </div>
 
     <!-- Auth modal -->
@@ -71,7 +77,7 @@
         </div>
     </div>
 
-    <script src="radio.js?v=5"></script>
+    <script src="radio.js?v=6"></script>
 </body>
 
 </html>
