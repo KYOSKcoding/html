@@ -405,7 +405,7 @@ def radio_audio():
         live_mode = RADIO_STATE["live_mode"]
 
     if live_mode:
-        return redirect(url_for("serve_live_stream"))
+        return redirect("/radio/live/index.m3u8")
 
     audio_file = os.path.join(RADIO_DIR, current_song)
 

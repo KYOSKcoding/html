@@ -33,7 +33,9 @@ class RadioPlayer {
         this.songSwitchUrl = this.getApiUrl('/api/radio/song');
         this.liveStartUrl = this.getApiUrl('/api/radio/live/start');
         this.liveStopUrl = this.getApiUrl('/api/radio/live/stop');
-        this.liveStreamUrl = this.getApiUrl('/api/radio/live-stream');
+        // HLS served at /radio/live/ — not under /kyosky prefix
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        this.liveHlsUrl = isLocal ? 'http://localhost:5001/radio/live/index.m3u8' : '/radio/live/index.m3u8';
 
         // Server broadcast state
         this.liveMode = false;
@@ -63,6 +65,7 @@ class RadioPlayer {
 
         // SSE connection
         this.eventSource = null;
+        this._hls = null;
 
         // Auth
         this.broadcasterToken = localStorage.getItem('radio_auth_token') || null;
@@ -600,18 +603,43 @@ class RadioPlayer {
     switchToLive() {
         this.audioReady = false;
         if (!this.audioElement.paused) this.audioElement.pause();
-        this.audioElement.src = this.liveStreamUrl;
-        this.audioElement.addEventListener('canplay', () => {
+        if (this._hls) { this._hls.destroy(); this._hls = null; }
+
+        const url = this.liveHlsUrl;
+        const onReady = () => {
             this.audioReady = true;
             this.listenButton.disabled = false;
             this._lastListenDisabled = false;
             this.updateListenButton();
             if (this.isListening) this.audioElement.play().catch(() => {});
-        }, { once: true });
-        this.audioElement.load();
+        };
+
+        if (this.audioElement.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari — native HLS
+            this.audioElement.src = url;
+            this.audioElement.addEventListener('canplay', onReady, { once: true });
+            this.audioElement.load();
+        } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+            this._hls = new Hls();
+            this._hls.loadSource(url);
+            this._hls.attachMedia(this.audioElement);
+            this._hls.on(Hls.Events.MANIFEST_PARSED, onReady);
+        } else {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+            s.onload = () => {
+                if (!Hls.isSupported()) { this.showError('HLS not supported in this browser'); return; }
+                this._hls = new Hls();
+                this._hls.loadSource(url);
+                this._hls.attachMedia(this.audioElement);
+                this._hls.on(Hls.Events.MANIFEST_PARSED, onReady);
+            };
+            document.head.appendChild(s);
+        }
     }
 
     switchToFile() {
+        if (this._hls) { this._hls.destroy(); this._hls = null; }
         this.reloadAudio();
     }
 
