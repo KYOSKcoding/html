@@ -42,6 +42,7 @@ pvlib==0.10.5
 Pillow==10.4.0
 imageio==2.34.1
 imageio-ffmpeg==0.4.9
+mutagen
 
 # ======================
 # Geospatial (WHEELS ONLY)

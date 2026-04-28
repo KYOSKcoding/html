@@ -9,7 +9,25 @@ import secrets
 import threading
 import time
 import queue as _queue
-from mutagen.mp3 import MP3 as _MP3
+
+try:
+    from mutagen.mp3 import MP3 as _MP3
+    def _get_mp3_duration(filepath: str) -> float:
+        try:
+            return _MP3(filepath).info.length
+        except Exception:
+            return 0.0
+except ImportError:
+    def _get_mp3_duration(filepath: str) -> float:
+        try:
+            import json as _json
+            r = subprocess.run(
+                ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", filepath],
+                capture_output=True, text=True, timeout=10,
+            )
+            return float(_json.loads(r.stdout)["format"]["duration"])
+        except Exception:
+            return 0.0
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -22,13 +40,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 RADIO_DIR = os.path.join(BASE_DIR, "..", "radio")
-
-
-def _get_mp3_duration(filepath: str) -> float:
-    try:
-        return _MP3(filepath).info.length
-    except Exception:
-        return 0.0
 
 
 def _scan_songs() -> list:
