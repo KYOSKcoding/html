@@ -8,6 +8,7 @@ import logging
 import secrets
 import threading
 import time
+import queue as _queue
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -38,11 +39,9 @@ BROADCASTER_TIMEOUT = (
     300  # seconds without heartbeat before another device can take over
 )
 
-# SSE (Server-Sent Events) state push clients
-SSE_EVENT_QUEUE = None  # Will be initialized as queue.Queue()
-SSE_CLIENTS = []  # List of (client_id, send_function) tuples
+# SSE (Server-Sent Events) — per-client queues for instant push on state change
+SSE_CLIENT_QUEUES: dict = {}  # thread_id → queue.Queue
 SSE_CLIENTS_LOCK = threading.Lock()
-SSE_CLIENT_ID_COUNTER = 0
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -248,7 +247,7 @@ def _validate_broadcaster_token(token):
 @app.route("/api/radio/auth", methods=["POST"])
 @app.route("/kyosky/api/radio/auth", methods=["POST"])
 def radio_auth():
-    """Authenticate broadcaster with password — only one active session allowed."""
+    """Authenticate broadcaster — always allows login, taking over any active session."""
     data = request.json or {}
     password = data.get("password", "")
 
@@ -257,24 +256,16 @@ def radio_auth():
         return jsonify({"authenticated": False, "error": "incorrect_password"}), 401
 
     with BROADCASTER_LOCK:
-        if _session_active_locked():
-            logger.warning("Radio authentication denied - session already active")
-            return (
-                jsonify(
-                    {
-                        "authenticated": False,
-                        "error": "session_active",
-                        "message": "Another device is already logged in as broadcaster.",
-                    }
-                ),
-                409,
-            )
+        took_over = _session_active_locked()
         new_token = secrets.token_urlsafe(32)
         BROADCASTER_SESSION["token"] = new_token
         BROADCASTER_SESSION["last_seen"] = time.time()
 
-    logger.info("Radio authentication successful, session token issued")
-    return jsonify({"authenticated": True, "token": new_token})
+    if took_over:
+        logger.info("Radio authentication: took over existing session")
+    else:
+        logger.info("Radio authentication successful, session token issued")
+    return jsonify({"authenticated": True, "token": new_token, "took_over": took_over})
 
 
 @app.route("/api/radio/logout", methods=["POST"])
@@ -291,58 +282,39 @@ def radio_logout():
     return jsonify({"success": False, "error": "invalid_token"}), 401
 
 
+def _current_state_dict() -> dict:
+    """Return current radio state as a dict (thread-safe)."""
+    with RADIO_STATE_LOCK:
+        is_playing = RADIO_STATE["is_playing"]
+        last_toggled_time = RADIO_STATE["last_toggled_time"]
+        audio_duration = RADIO_STATE["audio_duration"]
+    elapsed = (time.time() - last_toggled_time) % audio_duration if is_playing else 0
+    return {
+        "is_playing": is_playing,
+        "elapsed_time": elapsed,
+        "audio_duration": audio_duration,
+        "timestamp": time.time(),
+    }
+
+
+def _notify_sse_clients(state_data: dict):
+    """Push state to all connected SSE clients instantly."""
+    with SSE_CLIENTS_LOCK:
+        for q in list(SSE_CLIENT_QUEUES.values()):
+            try:
+                q.put_nowait(state_data)
+            except _queue.Full:
+                pass
+
+
 @app.route("/api/radio/state", methods=["GET"])
 @app.route("/kyosky/api/radio/state", methods=["GET"])
 def radio_state():
     """Get current radio playback state. Acts as heartbeat if broadcaster token present."""
-    # Broadcaster heartbeat — refresh last_seen if token is valid
     token = request.headers.get("X-Broadcaster-Token", "")
     if token:
         _validate_broadcaster_token(token)
-
-    with RADIO_STATE_LOCK:
-        is_playing = RADIO_STATE["is_playing"]
-        last_toggled_time = RADIO_STATE["last_toggled_time"]
-        audio_duration = RADIO_STATE["audio_duration"]
-
-    if is_playing:
-        elapsed_time = (time.time() - last_toggled_time) % audio_duration
-    else:
-        elapsed_time = 0
-
-    return jsonify(
-        {
-            "is_playing": is_playing,
-            "elapsed_time": elapsed_time,
-            "audio_duration": audio_duration,
-            "timestamp": time.time(),
-        }
-    )
-
-
-def _broadcast_state_to_sse():
-    """Notify all SSE clients of current radio state."""
-    with RADIO_STATE_LOCK:
-        is_playing = RADIO_STATE["is_playing"]
-        last_toggled_time = RADIO_STATE["last_toggled_time"]
-        audio_duration = RADIO_STATE["audio_duration"]
-
-    if is_playing:
-        elapsed_time = (time.time() - last_toggled_time) % audio_duration
-    else:
-        elapsed_time = 0
-
-    state_data = {
-        "is_playing": is_playing,
-        "elapsed_time": elapsed_time,
-        "audio_duration": audio_duration,
-        "timestamp": time.time(),
-    }
-    event_json = json.dumps(state_data)
-
-    # Send to all connected SSE clients (simulated via response.write buffering)
-    # In production, use a real SSE library or Redis pub/sub for scalable broadcasting.
-    logger.debug(f"Broadcasting state to SSE clients: {event_json}")
+    return jsonify(_current_state_dict())
 
 
 @app.route("/api/radio/toggle", methods=["POST"])
@@ -361,8 +333,8 @@ def radio_toggle():
 
     logger.info(f"Radio toggled: now {'playing' if is_playing else 'stopped'}")
 
-    # Broadcast state change to all SSE clients
-    _broadcast_state_to_sse()
+    state = _current_state_dict()
+    _notify_sse_clients(state)
 
     return jsonify(
         {
@@ -392,79 +364,36 @@ def radio_audio():
 @app.route("/api/radio/events")
 @app.route("/kyosky/api/radio/events")
 def radio_events():
-    """Server-Sent Events stream for real-time radio state updates."""
+    """Server-Sent Events stream — queue-based push, no polling."""
 
     def generate_sse():
-        """Generator function that sends SSE data to client."""
-        last_state = None
-        check_interval = 0.5  # Check state every 500ms
-        keepalive_interval = 15.0  # Send SSE comment ping every 15s
-        last_check = time.time()
-        last_keepalive = time.time()
+        client_id = id(threading.current_thread())
+        q: _queue.Queue = _queue.Queue(maxsize=8)
+
+        # Send initial state before registering — avoids missing an update
+        # that arrives between registration and the first yield.
+        initial = _current_state_dict()
+        yield f"data: {json.dumps(initial)}\n\n"
+
+        with SSE_CLIENTS_LOCK:
+            SSE_CLIENT_QUEUES[client_id] = q
 
         try:
-            # Send initial state
-            with RADIO_STATE_LOCK:
-                is_playing = RADIO_STATE["is_playing"]
-                last_toggled_time = RADIO_STATE["last_toggled_time"]
-                audio_duration = RADIO_STATE["audio_duration"]
-
-            if is_playing:
-                elapsed_time = (time.time() - last_toggled_time) % audio_duration
-            else:
-                elapsed_time = 0
-
-            current_state = {
-                "is_playing": is_playing,
-                "elapsed_time": elapsed_time,
-                "audio_duration": audio_duration,
-                "timestamp": time.time(),
-            }
-
-            yield f"data: {json.dumps(current_state)}\n\n"
-            last_state = current_state
-
-            # Keep connection alive and send updates every 500ms
             while True:
-                now = time.time()
-                if now - last_check >= check_interval:
-                    last_check = now
-
-                    with RADIO_STATE_LOCK:
-                        is_playing = RADIO_STATE["is_playing"]
-                        last_toggled_time = RADIO_STATE["last_toggled_time"]
-                        audio_duration = RADIO_STATE["audio_duration"]
-
-                    if is_playing:
-                        elapsed_time = (
-                            time.time() - last_toggled_time
-                        ) % audio_duration
-                    else:
-                        elapsed_time = 0
-
-                    current_state = {
-                        "is_playing": is_playing,
-                        "elapsed_time": elapsed_time,
-                        "audio_duration": audio_duration,
-                        "timestamp": time.time(),
-                    }
-
-                    # Send if state changed
-                    if current_state["is_playing"] != last_state["is_playing"]:
-                        yield f"data: {json.dumps(current_state)}\n\n"
-                        last_state = current_state
-
-                # Send SSE comment ping to prevent proxy/nginx from closing idle connection
-                if now - last_keepalive >= keepalive_interval:
-                    last_keepalive = now
+                try:
+                    # Block until toggle pushes a state update (releases GIL).
+                    # Timeout fires keepalive so proxies don't kill idle connections.
+                    event = q.get(timeout=15)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except _queue.Empty:
                     yield ": keepalive\n\n"
-
-                time.sleep(0.1)  # Small sleep to avoid busy-waiting
-
         except GeneratorExit:
             logger.debug("SSE client disconnected")
         except Exception as e:
             logger.error(f"SSE error: {e}")
+        finally:
+            with SSE_CLIENTS_LOCK:
+                SSE_CLIENT_QUEUES.pop(client_id, None)
 
     return Response(
         generate_sse(),

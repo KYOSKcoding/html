@@ -224,9 +224,13 @@ if [ -f venv/bin/activate ]; then
 fi
 
 # Start Gunicorn - bind to 0.0.0.0 for Uberspace
+# NOTE: must be 1 worker with threads (not multiple workers) so that all
+# SSE connections and toggle requests share the same in-memory RADIO_STATE.
+# Multiple workers = separate processes = state not shared = stop/start broken.
 exec gunicorn \
     --bind 0.0.0.0:5001 \
-    --workers 2 \
+    --workers 1 \
+    --threads 4 \
     --timeout 300 \
     --access-logfile $HOME/logs/kyosky-access.log \
     --error-logfile $HOME/logs/kyosky-error.log \

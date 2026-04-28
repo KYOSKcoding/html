@@ -99,21 +99,18 @@ class RadioPlayer {
         this.startHeartbeat();
     }
 
-    async preloadAudio() {
-        try {
-            const response = await fetch(this.getApiUrl('/api/radio/audio'));
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const blob = await response.blob();
-            this.audioElement.src = URL.createObjectURL(blob);
+    preloadAudio() {
+        this.audioElement.src = this.getApiUrl('/api/radio/audio');
+        this.audioElement.addEventListener('canplay', () => {
             this.audioReady = true;
             if (!this.isListening) this.listenButton.innerHTML = '&#9654; Listen';
-            // Enable button now without waiting for next poll
             this.listenButton.disabled = false;
             this._lastListenDisabled = false;
-        } catch (error) {
-            this.showError(`Failed to load audio: ${error.message}`);
+        }, { once: true });
+        this.audioElement.addEventListener('error', () => {
+            this.showError('Failed to load audio');
             this.listenButton.innerHTML = 'Audio unavailable';
-        }
+        }, { once: true });
     }
 
     handleListen() {
@@ -188,9 +185,12 @@ class RadioPlayer {
                 localStorage.setItem('radio_auth_token', data.token);
                 this.isAuthenticated = true;
                 this.applyAuthVisibility();
-                this.closeModal();
-            } else if (data.error === 'session_active') {
-                this.showAuthError(data.message || 'Another broadcaster is already logged in.');
+                if (data.took_over) {
+                    this.showAuthError('Warning: previous broadcaster session ended.');
+                    setTimeout(() => this.closeModal(), 2000);
+                } else {
+                    this.closeModal();
+                }
             } else {
                 this.showAuthError('Incorrect password.');
             }
