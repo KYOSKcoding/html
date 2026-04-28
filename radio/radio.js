@@ -55,6 +55,11 @@ class RadioPlayer {
         this.broadcasterToken = localStorage.getItem('radio_auth_token') || null;
         this.isAuthenticated = !!this.broadcasterToken;
 
+        // Play button stays disabled until first state is received from server,
+        // preventing the race where the button shows "Start" before SSE delivers
+        // the real is_playing=true, causing an accidental stop-instead-of-start click.
+        this._playButtonReady = false;
+
         this.init();
     }
 
@@ -91,6 +96,7 @@ class RadioPlayer {
         this.preloadAudio();
         this.startSSE();
         this.startTimeDisplayUpdate();
+        this.startHeartbeat();
     }
 
     async preloadAudio() {
@@ -221,6 +227,7 @@ class RadioPlayer {
         this._lastAuthVisible = this.isAuthenticated;
         if (this.isAuthenticated) {
             this.playButton.style.display = 'inline-block';
+            this.playButton.disabled = !this._playButtonReady;
             this.logoutButton.style.display = 'inline-block';
             this.loginLink.style.display = 'none';
             this.refreshBroadcasterButtonLabel();
@@ -398,6 +405,13 @@ class RadioPlayer {
     }
 
     updateUI() {
+        // Unlock play button on first state received — prevents wrong-direction
+        // toggle caused by the race between page render and SSE initial state.
+        if (!this._playButtonReady) {
+            this._playButtonReady = true;
+            if (this.isAuthenticated) this.playButton.disabled = false;
+        }
+
         if (this.isPlaying !== this._lastIsPlaying) {
             this._lastIsPlaying = this.isPlaying;
             if (this.isPlaying) {
@@ -449,11 +463,25 @@ class RadioPlayer {
         }
     }
 
+    startHeartbeat() {
+        // SSE cannot send custom headers, so the broadcaster token never refreshes
+        // last_seen via SSE. Without a heartbeat the session expires after 5 minutes
+        // of inactivity (no toggles), blocking re-login. This fetch keeps last_seen fresh.
+        this._heartbeatTimer = setInterval(() => {
+            if (this.isAuthenticated) {
+                fetch(this.stateUrl, { headers: this.broadcasterHeaders() }).catch(() => {});
+            }
+        }, 60 * 1000);
+    }
+
     disconnect() {
         if (this.eventSource) {
             this.eventSource.close();
             this.eventSource = null;
             console.log('SSE connection closed');
+        }
+        if (this._heartbeatTimer) {
+            clearInterval(this._heartbeatTimer);
         }
     }
 }
