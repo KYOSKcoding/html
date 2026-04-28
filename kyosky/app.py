@@ -40,6 +40,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 RADIO_DIR = os.path.join(BASE_DIR, "..", "radio")
+HLS_LIVE_DIR = os.path.join(RADIO_DIR, "live")
 
 
 def _scan_songs() -> list:
@@ -743,6 +744,23 @@ def run_radar_script(data=None, timeout=300):
     return result
 
 
+def _live_watchdog():
+    """Auto-disable live_mode when the HLS stream goes stale (stream dropped without clicking Stop Live)."""
+    while True:
+        time.sleep(5)
+        with RADIO_STATE_LOCK:
+            if not RADIO_STATE["live_mode"]:
+                continue
+        hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
+        if os.path.exists(hls_index):
+            age = time.time() - os.path.getmtime(hls_index)
+            if age > 15:
+                with RADIO_STATE_LOCK:
+                    RADIO_STATE["live_mode"] = False
+                logger.info("Live watchdog: HLS stale for %.0fs, disabling live mode", age)
+                _notify_sse_clients(_current_state_dict())
+
+
 def _scheduler_loop(interval_minutes=10):
     """Background loop that runs radar generation every `interval_minutes` minutes.
     Prediction runs every 3 hours."""
@@ -812,6 +830,7 @@ def _start_scheduler_once():
             target=_scheduler_loop, kwargs={"interval_minutes": 10}, daemon=True
         )
         t.start()
+        threading.Thread(target=_live_watchdog, daemon=True).start()
         _init_scheduler = True
 
 
