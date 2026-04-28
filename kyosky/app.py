@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, send_from_directory, Response
 from flask_cors import CORS
 import subprocess
 import os
@@ -114,6 +114,13 @@ def radio_page():
     except Exception as e:
         logger.error(f"Error loading radio/index.html: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/radio/<path:filename>")
+def radio_static(filename):
+    """Serve static assets (CSS, JS) from the radio directory."""
+    radio_dir = os.path.join(os.path.dirname(__file__), "..", "radio")
+    return send_from_directory(radio_dir, filename)
 
 
 @app.route("/initial-plots")
@@ -391,7 +398,9 @@ def radio_events():
         """Generator function that sends SSE data to client."""
         last_state = None
         check_interval = 0.5  # Check state every 500ms
+        keepalive_interval = 15.0  # Send SSE comment ping every 15s
         last_check = time.time()
+        last_keepalive = time.time()
 
         try:
             # Send initial state
@@ -444,6 +453,11 @@ def radio_events():
                     if current_state["is_playing"] != last_state["is_playing"]:
                         yield f"data: {json.dumps(current_state)}\n\n"
                         last_state = current_state
+
+                # Send SSE comment ping to prevent proxy/nginx from closing idle connection
+                if now - last_keepalive >= keepalive_interval:
+                    last_keepalive = now
+                    yield ": keepalive\n\n"
 
                 time.sleep(0.1)  # Small sleep to avoid busy-waiting
 
