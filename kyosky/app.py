@@ -452,12 +452,16 @@ def radio_events():
         except Exception as e:
             logger.error(f"SSE error: {e}")
 
-    return Response(generate_sse(), mimetype="text/event-stream", headers={
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "Access-Control-Allow-Origin": "*",
-        "X-Accel-Buffering": "no"
-    })
+    return Response(
+        generate_sse(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.route("/radar", methods=["POST"])
