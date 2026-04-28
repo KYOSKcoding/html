@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 import subprocess
 import os
@@ -452,13 +452,12 @@ def radio_events():
         except Exception as e:
             logger.error(f"SSE error: {e}")
 
-    response = app.make_response(generate_sse(), 200)
-    response.headers["Content-Type"] = "text/event-stream"
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["X-Accel-Buffering"] = "no"  # Disable buffering in proxies
-    return response
+    return Response(generate_sse(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "X-Accel-Buffering": "no"
+    })
 
 
 @app.route("/radar", methods=["POST"])
