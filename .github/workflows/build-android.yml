@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -20,9 +22,13 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ky-radio-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest \
+            --title "Latest Build" \
+            --notes "Built from \`${{ github.sha }}\` on \`${{ github.ref_name }}\`" \
+            --latest \
+            android/app/build/outputs/apk/debug/app-debug.apk#ky-radio.apk
