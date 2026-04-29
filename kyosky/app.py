@@ -91,6 +91,10 @@ SSE_CLIENTS_LOCK = threading.Lock()
 # Live stream buffer — chunks pushed by PUT /api/radio/stream, pulled by GET /api/radio/live-stream
 LIVE_STREAM_BUFFER: _queue.Queue = _queue.Queue(maxsize=256)
 
+# HLS segment counter for relay-segment endpoint
+_HLS_SEG_COUNTER = 0
+_HLS_SEG_LOCK = threading.Lock()
+
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
 logger.info(f"App root path: {app.root_path}")
@@ -519,6 +523,93 @@ def relay_stream():
             RADIO_STATE["live_mode"] = False
         _notify_sse_clients(_current_state_dict())
         logger.info("relay_stream: stream ended, live mode off")
+
+    return "", 200
+
+
+def _write_hls_playlist(ts_files: list, media_sequence: int) -> None:
+    """Atomically write an HLS playlist for the given .ts filenames."""
+    content = (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:3\n"
+        "#EXT-X-TARGETDURATION:5\n"
+        f"#EXT-X-MEDIA-SEQUENCE:{media_sequence}\n"
+    )
+    for fname in ts_files:
+        content += "#EXTINF:4.000,\n" + fname + "\n"
+    m3u8 = os.path.join(HLS_LIVE_DIR, "index.m3u8")
+    tmp = m3u8 + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(content)
+    os.replace(tmp, m3u8)
+
+
+@app.route("/api/radio/relay-segment", methods=["POST"])
+@app.route("/kyosky/api/radio/relay-segment", methods=["POST"])
+def relay_segment():
+    """Receive a single OGG audio segment, convert to .ts, update HLS playlist.
+
+    Phone loops: record 4 s → POST here → repeat.  No ffmpeg needed on phone.
+    """
+    global _HLS_SEG_COUNTER
+    token = request.headers.get("X-Auth-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    ogg_data = request.stream.read()
+    if not ogg_data:
+        return "", 400
+
+    os.makedirs(HLS_LIVE_DIR, exist_ok=True)
+
+    with _HLS_SEG_LOCK:
+        n = _HLS_SEG_COUNTER
+        _HLS_SEG_COUNTER += 1
+
+    tmp_ogg = os.path.join(HLS_LIVE_DIR, f"_tmp_{n}.ogg")
+    ts_name = f"seg{n:06d}.ts"
+    ts_path = os.path.join(HLS_LIVE_DIR, ts_name)
+
+    with open(tmp_ogg, "wb") as f:
+        f.write(ogg_data)
+
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", tmp_ogg,
+         "-c:a", "aac", "-b:a", "128k", "-f", "mpegts", ts_path],
+        capture_output=True,
+    )
+    try:
+        os.unlink(tmp_ogg)
+    except OSError:
+        pass
+
+    if result.returncode != 0 or not os.path.exists(ts_path):
+        logger.error("relay_segment: ffmpeg failed: %s", result.stderr.decode()[-300:])
+        return "", 500
+
+    # Keep last 5 .ts segments; delete older ones
+    all_ts = sorted(
+        f for f in os.listdir(HLS_LIVE_DIR)
+        if f.endswith(".ts") and not f.startswith("_")
+    )
+    while len(all_ts) > 5:
+        old = all_ts.pop(0)
+        try:
+            os.remove(os.path.join(HLS_LIVE_DIR, old))
+        except OSError:
+            pass
+
+    first_n = int(all_ts[0].replace("seg", "").replace(".ts", "")) if all_ts else n
+    _write_hls_playlist(all_ts, first_n)
+    logger.info("relay_segment: wrote segment %d, playlist has %d entries", n, len(all_ts))
+
+    # Enable live mode on first segment
+    with RADIO_STATE_LOCK:
+        was_live = RADIO_STATE["live_mode"]
+        RADIO_STATE["live_mode"] = True
+    if not was_live:
+        _notify_sse_clients(_current_state_dict())
+        logger.info("relay_segment: live mode enabled")
 
     return "", 200
 

@@ -1,12 +1,14 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# Stream live audio to kyo.sk — no ffmpeg needed on phone.
-# Requires: termux-microphone-record (termux-api), curl
+# Stream live audio to kyo.sk via 4-second segments — no ffmpeg needed on phone.
+# Requires: termux-microphone-record (termux-api package), curl
 export PATH=/data/data/com.termux/files/usr/bin:$PATH
 HOME=/data/data/com.termux/files/home
 
 PASSWORD="broadcast"
 SERVER="https://kyo.sk/kyosky"
-AUDIO_FILE="$HOME/.live_relay.ogg"
+SEG_FILE="$HOME/.relay_seg.ogg"
+
+trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; exit 0' INT TERM
 
 echo "Authenticating..."
 AUTH=$(curl -sf -X POST \
@@ -20,28 +22,32 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" = "$AUTH" ]; then
   exit 1
 fi
 echo "Authenticated (${TOKEN:0:8}...)"
+echo "Starting segment loop — Ctrl+C to stop."
 
-# Stop any leftover recording session
-termux-microphone-record -q 2>/dev/null
-sleep 0.5
-rm -f "$AUDIO_FILE"
+N=0
+while true; do
+  rm -f "$SEG_FILE"
 
-echo "Starting microphone..."
-termux-microphone-record -e OPUS -r 44100 -c 1 -f "$AUDIO_FILE"
+  # Record 4 seconds (non-blocking — returns immediately)
+  termux-microphone-record -e OPUS -r 44100 -c 1 -l 4 -f "$SEG_FILE"
 
-echo "Waiting for audio data..."
-until [ -f "$AUDIO_FILE" ] && [ "$(wc -c < "$AUDIO_FILE" 2>/dev/null || echo 0)" -gt 1000 ]; do
-  sleep 0.5
-done
+  # Wait for recording to finish
+  sleep 4.5
+  termux-microphone-record -q 2>/dev/null
 
-echo "Streaming to server (server converts audio)..."
-tail -c +0 -f "$AUDIO_FILE" | \
-  curl -X PUT \
+  SIZE=$(wc -c < "$SEG_FILE" 2>/dev/null || echo 0)
+  if [ "$SIZE" -lt 500 ]; then
+    echo "Segment $N: too small ($SIZE bytes), skipping"
+    continue
+  fi
+
+  # Upload segment to server
+  HTTP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST \
     -H "X-Auth-Token: $TOKEN" \
     -H "Content-Type: audio/ogg" \
-    -H "Transfer-Encoding: chunked" \
-    --data-binary @- \
-    "$SERVER/api/radio/relay-stream"
+    --data-binary @"$SEG_FILE" \
+    "$SERVER/api/radio/relay-segment")
 
-echo "Stream ended."
-termux-microphone-record -q 2>/dev/null
+  echo "Segment $N → $HTTP (${SIZE}B)"
+  N=$((N + 1))
+done
