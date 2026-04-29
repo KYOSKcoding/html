@@ -71,6 +71,7 @@ RADIO_STATE = {
     "current_song": _DEFAULT_SONG,
     "audio_duration": _default_duration,
     "live_mode": False,
+    "broadcast_title": "",
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -94,6 +95,10 @@ LIVE_STREAM_BUFFER: _queue.Queue = _queue.Queue(maxsize=256)
 # HLS segment counter for relay-segment endpoint
 _HLS_SEG_COUNTER = 0
 _HLS_SEG_LOCK = threading.Lock()
+
+# Running archive file path for relay-segment broadcasts
+_RELAY_ARCHIVE: dict = {"path": None}
+_RELAY_ARCHIVE_LOCK = threading.Lock()
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -349,6 +354,7 @@ def _current_state_dict() -> dict:
         "audio_duration": audio_duration,
         "current_song": current_song,
         "live_mode": live_mode,
+        "broadcast_title": RADIO_STATE["broadcast_title"],
         "timestamp": time.time(),
     }
 
@@ -448,6 +454,27 @@ def live_stop():
     logger.info("Live mode disabled")
     _notify_sse_clients(_current_state_dict())
     return jsonify({"live_mode": False})
+
+
+@app.route("/api/radio/title", methods=["POST"])
+@app.route("/kyosky/api/radio/title", methods=["POST"])
+def set_broadcast_title():
+    """Update the broadcast title shown to all listeners."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+    title = (request.json or {}).get("title", "")[:80].strip()
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["broadcast_title"] = title
+    _notify_sse_clients(_current_state_dict())
+    # Write to file so the RTMP shell script can use it for archive naming
+    try:
+        with open(os.path.join(RADIO_DIR, ".broadcast_title"), "w") as f:
+            f.write(title)
+    except OSError:
+        pass
+    logger.info("Broadcast title set: %r", title)
+    return jsonify({"broadcast_title": title})
 
 
 @app.route("/api/radio/stream", methods=["PUT"])
@@ -601,9 +628,24 @@ def relay_segment():
     with open(tmp_ogg, "wb") as f:
         f.write(ogg_data)
 
+    # Convert OGG → MPEG-TS for HLS and → MP3 for archive in one ffmpeg pass
+    with _RELAY_ARCHIVE_LOCK:
+        if _RELAY_ARCHIVE["path"] is None:
+            with RADIO_STATE_LOCK:
+                title = RADIO_STATE["broadcast_title"]
+            safe = "".join(
+                c if c.isalnum() or c in "-_" else "_" for c in title
+            ).strip("_")[:40]
+            ts_stamp = time.strftime("%Y%m%d_%H%M%S")
+            fname = f"live_{safe}_{ts_stamp}.mp3" if safe else f"live_{ts_stamp}.mp3"
+            _RELAY_ARCHIVE["path"] = os.path.join(RADIO_DIR, fname)
+        archive_path = _RELAY_ARCHIVE["path"]
+
+    tmp_mp3 = os.path.join(HLS_LIVE_DIR, f"_arc_{n}.mp3")
     result = subprocess.run(
         ["ffmpeg", "-y", "-i", tmp_ogg,
-         "-c:a", "aac", "-b:a", "128k", "-f", "mpegts", ts_path],
+         "-c:a", "aac", "-b:a", "128k", "-f", "mpegts", ts_path,
+         "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", tmp_mp3],
         capture_output=True,
     )
     try:
@@ -613,7 +655,24 @@ def relay_segment():
 
     if result.returncode != 0 or not os.path.exists(ts_path):
         logger.error("relay_segment: ffmpeg failed: %s", result.stderr.decode()[-300:])
+        try:
+            os.unlink(tmp_mp3)
+        except OSError:
+            pass
         return "", 500
+
+    # Append mp3 chunk to running archive
+    if os.path.exists(tmp_mp3):
+        try:
+            with open(archive_path, "ab") as af, open(tmp_mp3, "rb") as mf:
+                af.write(mf.read())
+        except OSError as e:
+            logger.warning("relay_segment: archive append failed: %s", e)
+        finally:
+            try:
+                os.unlink(tmp_mp3)
+            except OSError:
+                pass
 
     # Keep last 5 .ts segments; delete older ones
     all_ts = sorted(
@@ -933,6 +992,8 @@ def _live_watchdog():
             if age > 15:
                 with RADIO_STATE_LOCK:
                     RADIO_STATE["live_mode"] = False
+                with _RELAY_ARCHIVE_LOCK:
+                    _RELAY_ARCHIVE["path"] = None  # next broadcast creates a fresh archive
                 logger.info("Live watchdog: HLS stale for %.0fs, disabling live mode", age)
                 _notify_sse_clients(_current_state_dict())
 

@@ -45,6 +45,26 @@ body {
     font-style: italic;
 }
 
+.radio-track[contenteditable="true"] {
+    cursor: text;
+    border-bottom: 1px dashed #00aa00;
+    padding-bottom: 2px;
+    outline: none;
+    min-width: 80px;
+    display: inline-block;
+}
+
+.radio-track[contenteditable="true"]:focus {
+    color: #00ff00;
+    border-bottom-color: #00ff00;
+}
+
+.radio-track[contenteditable="true"]:empty::before {
+    content: attr(data-placeholder);
+    color: #006600;
+    font-style: italic;
+}
+
 .auth-input-group {
     display: flex;
     gap: 10px;

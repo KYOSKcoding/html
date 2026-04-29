@@ -24,6 +24,10 @@ class RadioPlayer {
         this.songSection = document.getElementById('songSection');
         this.songButtonsEl = document.getElementById('songButtons');
 
+        // Broadcast title (editable when authenticated)
+        this.titleEl = document.querySelector('.radio-track');
+        this.titleUrl = this.getApiUrl('/api/radio/title');
+
         // API paths
         this.stateUrl = this.getApiUrl('/api/radio/state');
         this.toggleUrl = this.getApiUrl('/api/radio/toggle');
@@ -58,6 +62,9 @@ class RadioPlayer {
         this._lastStatusClass = null;
         this._lastStatusText = null;
         this._lastAuthVisible = null;
+
+        // Broadcast title
+        this._lastBroadcastTitle = null;
 
         // Race protection — handlePlay bumps stateSeq to invalidate stale poll responses
         this._stateSeq = 0;
@@ -110,11 +117,49 @@ class RadioPlayer {
         });
 
         this.applyAuthVisibility();
+        this.setupTitleEditing();
         this.preloadAudio();
         this.startSSE();
         this.startTimeDisplayUpdate();
         this.startHeartbeat();
         if (this.isAuthenticated) this.loadSongs();
+    }
+
+    setupTitleEditing() {
+        this.titleEl.addEventListener('blur', () => {
+            if (this.isAuthenticated) this.saveBroadcastTitle();
+        });
+        this.titleEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.titleEl.blur(); }
+            if (e.key === 'Escape') {
+                this.titleEl.textContent = this._lastBroadcastTitle || '';
+                this.titleEl.blur();
+            }
+        });
+    }
+
+    async saveBroadcastTitle() {
+        const title = this.titleEl.textContent.trim();
+        try {
+            await fetch(this.titleUrl, {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ title })
+            });
+        } catch (e) {
+            console.warn('Could not save broadcast title:', e);
+        }
+    }
+
+    updateBroadcastTitle(title) {
+        if (title === this._lastBroadcastTitle) return;
+        this._lastBroadcastTitle = title;
+        // Don't overwrite while broadcaster is actively editing
+        if (document.activeElement === this.titleEl) return;
+        this.titleEl.textContent = title || (this.isAuthenticated ? '' : 'Jingle Macker');
+        if (this.isAuthenticated) {
+            this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
+        }
     }
 
     preloadAudio() {
@@ -252,12 +297,16 @@ class RadioPlayer {
             this.liveButton.style.display = 'inline-block';
             this.logoutButton.style.display = 'inline-block';
             this.loginLink.style.display = 'none';
+            this.titleEl.contentEditable = 'true';
+            this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
             this.refreshBroadcasterButtonLabel();
         } else {
             this.playButton.style.display = 'none';
             this.liveButton.style.display = 'none';
             this.logoutButton.style.display = 'none';
             this.loginLink.style.display = 'inline-block';
+            this.titleEl.contentEditable = 'false';
+            this.titleEl.removeAttribute('data-placeholder');
         }
     }
 
@@ -346,6 +395,7 @@ class RadioPlayer {
             }
             if (this.isListening) this.applyLocalAudio();
 
+            if (data.broadcast_title !== undefined) this.updateBroadcastTitle(data.broadcast_title);
             this.clearError();
             this.setStatus('Online', 'online');
             this.updateUI();
@@ -383,6 +433,8 @@ class RadioPlayer {
                     this.highlightActiveSong(data.current_song);
                     this.reloadAudio();
                 }
+
+                if (data.broadcast_title !== undefined) this.updateBroadcastTitle(data.broadcast_title);
 
                 const wasPlaying = this.isPlaying;
                 this.isPlaying = data.is_playing;
