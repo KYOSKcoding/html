@@ -527,16 +527,43 @@ def relay_stream():
     return "", 200
 
 
+def _ts_duration(ts_path: str) -> float:
+    """Return duration of a .ts file in seconds via ffprobe."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_format", ts_path],
+            capture_output=True, text=True, timeout=5,
+        )
+        return float(json.loads(r.stdout)["format"]["duration"])
+    except Exception:
+        return 4.0
+
+
 def _write_hls_playlist(ts_files: list, media_sequence: int) -> None:
-    """Atomically write an HLS playlist for the given .ts filenames."""
+    """Atomically write an HLS playlist for the given .ts filenames.
+
+    Each segment is independently converted and starts with PTS=0, so we mark
+    every segment with EXT-X-DISCONTINUITY to prevent hls.js from expecting
+    continuous timestamps and inserting silence at boundaries.
+    """
+    max_dur = 5.0
+    entries = []
+    for fname in ts_files:
+        dur = _ts_duration(os.path.join(HLS_LIVE_DIR, fname))
+        max_dur = max(max_dur, dur + 0.5)
+        entries.append((fname, dur))
+
     content = (
         "#EXTM3U\n"
         "#EXT-X-VERSION:3\n"
-        "#EXT-X-TARGETDURATION:5\n"
+        f"#EXT-X-TARGETDURATION:{int(max_dur)}\n"
         f"#EXT-X-MEDIA-SEQUENCE:{media_sequence}\n"
+        "#EXT-X-DISCONTINUITY-SEQUENCE:0\n"
     )
-    for fname in ts_files:
-        content += "#EXTINF:4.000,\n" + fname + "\n"
+    for fname, dur in entries:
+        content += f"#EXT-X-DISCONTINUITY\n#EXTINF:{dur:.3f},\n{fname}\n"
+
     m3u8 = os.path.join(HLS_LIVE_DIR, "index.m3u8")
     tmp = m3u8 + ".tmp"
     with open(tmp, "w") as f:
