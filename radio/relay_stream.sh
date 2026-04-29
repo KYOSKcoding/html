@@ -5,7 +5,7 @@ export PATH=/data/data/com.termux/files/usr/bin:$PATH
 HOME=/data/data/com.termux/files/home
 
 PASSWORD="broadcast"
-SERVER="https://kyo.sk"
+SERVER="https://kyo.sk/kyosky"
 AUDIO_FILE="$HOME/.live_relay.ogg"
 
 echo "Authenticating..."
