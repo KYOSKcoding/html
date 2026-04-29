@@ -6,36 +6,44 @@ HOME=/data/data/com.termux/files/home
 
 PASSWORD="broadcast"
 SERVER="https://kyo.sk/kyosky"
-SEG_FILE="$HOME/.relay_seg.ogg"
+CURR="$HOME/.relay_curr.ogg"
+NEXT="$HOME/.relay_next.ogg"
 
-trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; exit 0' INT TERM HUP
+trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; termux-wake-unlock 2>/dev/null; rm -f "$CURR" "$NEXT"; exit 0' INT TERM HUP
 
-echo "Starting segment loop — Ctrl+C to stop."
+echo "Acquiring wakelock..."
+termux-wake-lock
+
+echo "Recording first segment..."
+rm -f "$CURR"
+termux-microphone-record -e OPUS -r 44100 -c 1 -l 4 -f "$CURR"
+sleep 4.2
+termux-microphone-record -q 2>/dev/null
+
+echo "Starting pipeline loop — Ctrl+C or close Termux to stop."
 
 N=0
 while true; do
-  rm -f "$SEG_FILE"
+  # Start recording NEXT segment immediately (non-blocking)
+  rm -f "$NEXT"
+  termux-microphone-record -e OPUS -r 44100 -c 1 -l 4 -f "$NEXT"
 
-  # Record 4 seconds (non-blocking — returns immediately)
-  termux-microphone-record -e OPUS -r 44100 -c 1 -l 4 -f "$SEG_FILE"
-
-  # Wait for recording to finish
-  sleep 4.5
-  termux-microphone-record -q 2>/dev/null
-
-  SIZE=$(wc -c < "$SEG_FILE" 2>/dev/null || echo 0)
-  if [ "$SIZE" -lt 500 ]; then
-    echo "Segment $N: too small ($SIZE bytes), skipping"
-    continue
+  # Upload CURR while NEXT is recording
+  SIZE=$(wc -c < "$CURR" 2>/dev/null || echo 0)
+  if [ "$SIZE" -ge 500 ]; then
+    HTTP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST \
+      -H "X-Broadcast-Password: $PASSWORD" \
+      -H "Content-Type: audio/ogg" \
+      --data-binary @"$CURR" \
+      "$SERVER/api/radio/relay-segment")
+    echo "Segment $N → $HTTP (${SIZE}B)"
+  else
+    echo "Segment $N: too small (${SIZE}B), skipping"
   fi
 
-  # Upload segment — password in header, no session token needed
-  HTTP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST \
-    -H "X-Broadcast-Password: $PASSWORD" \
-    -H "Content-Type: audio/ogg" \
-    --data-binary @"$SEG_FILE" \
-    "$SERVER/api/radio/relay-segment")
-
-  echo "Segment $N → $HTTP (${SIZE}B)"
+  # Wait for NEXT recording to finish, then swap
+  sleep 4.2
+  termux-microphone-record -q 2>/dev/null
+  mv "$NEXT" "$CURR"
   N=$((N + 1))
 done

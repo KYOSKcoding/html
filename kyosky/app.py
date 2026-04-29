@@ -92,13 +92,9 @@ SSE_CLIENTS_LOCK = threading.Lock()
 # Live stream buffer — chunks pushed by PUT /api/radio/stream, pulled by GET /api/radio/live-stream
 LIVE_STREAM_BUFFER: _queue.Queue = _queue.Queue(maxsize=256)
 
-# HLS segment counter for relay-segment endpoint
-_HLS_SEG_COUNTER = 0
-_HLS_SEG_LOCK = threading.Lock()
-
-# Running archive file path for relay-segment broadcasts
-_RELAY_ARCHIVE: dict = {"path": None}
-_RELAY_ARCHIVE_LOCK = threading.Lock()
+# Persistent encoder for relay-segment: one long-running ffmpeg, no per-segment discontinuities
+_RELAY_ENCODER: dict = {"proc": None, "archive": None}
+_RELAY_ENCODER_LOCK = threading.Lock()
 
 logger.info(f"Flask app initialized")
 logger.info(f"Current working directory: {os.getcwd()}")
@@ -554,59 +550,60 @@ def relay_stream():
     return "", 200
 
 
-def _ts_duration(ts_path: str) -> float:
-    """Return duration of a .ts file in seconds via ffprobe."""
-    try:
-        r = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json",
-             "-show_format", ts_path],
-            capture_output=True, text=True, timeout=5,
-        )
-        return float(json.loads(r.stdout)["format"]["duration"])
-    except Exception:
-        return 4.0
+def _ensure_relay_encoder() -> bool:
+    """Start the persistent PCM→HLS ffmpeg encoder if not already running.
 
-
-def _write_hls_playlist(ts_files: list, media_sequence: int) -> None:
-    """Atomically write an HLS playlist for the given .ts filenames.
-
-    Each segment is independently converted and starts with PTS=0, so we mark
-    every segment with EXT-X-DISCONTINUITY to prevent hls.js from expecting
-    continuous timestamps and inserting silence at boundaries.
+    Called with _RELAY_ENCODER_LOCK held. Returns True if the encoder is ready.
+    Feeds raw s16le mono 44100 Hz PCM on stdin; outputs HLS + MP3 archive.
     """
-    max_dur = 5.0
-    entries = []
-    for fname in ts_files:
-        dur = _ts_duration(os.path.join(HLS_LIVE_DIR, fname))
-        max_dur = max(max_dur, dur + 0.5)
-        entries.append((fname, dur))
+    proc = _RELAY_ENCODER["proc"]
+    if proc is not None and proc.poll() is None:
+        return True
 
-    content = (
-        "#EXTM3U\n"
-        "#EXT-X-VERSION:3\n"
-        f"#EXT-X-TARGETDURATION:{int(max_dur)}\n"
-        f"#EXT-X-MEDIA-SEQUENCE:{media_sequence}\n"
-        "#EXT-X-DISCONTINUITY-SEQUENCE:0\n"
-    )
-    for fname, dur in entries:
-        content += f"#EXT-X-DISCONTINUITY\n#EXTINF:{dur:.3f},\n{fname}\n"
+    with RADIO_STATE_LOCK:
+        title = RADIO_STATE["broadcast_title"]
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in title).strip("_")[:40]
+    ts_stamp = time.strftime("%Y%m%d_%H%M%S")
+    fname = f"live_{safe}_{ts_stamp}.mp3" if safe else f"live_{ts_stamp}.mp3"
+    archive_path = os.path.join(RADIO_DIR, fname)
 
-    m3u8 = os.path.join(HLS_LIVE_DIR, "index.m3u8")
-    tmp = m3u8 + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(content)
-    os.replace(tmp, m3u8)
+    os.makedirs(HLS_LIVE_DIR, exist_ok=True)
+    for f in os.listdir(HLS_LIVE_DIR):
+        try:
+            os.remove(os.path.join(HLS_LIVE_DIR, f))
+        except OSError:
+            pass
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "s16le", "-ar", "44100", "-ac", "1", "-i", "pipe:0",
+        # HLS output — continuous PTS, no discontinuities
+        "-map", "0:a", "-c:a", "aac", "-b:a", "128k",
+        "-f", "hls", "-hls_time", "4", "-hls_list_size", "5",
+        "-hls_flags", "delete_segments",
+        "-hls_segment_filename", os.path.join(HLS_LIVE_DIR, "seg%06d.ts"),
+        os.path.join(HLS_LIVE_DIR, "index.m3u8"),
+        # Archive output
+        "-map", "0:a", "-c:a", "libmp3lame", "-b:a", "128k",
+        archive_path,
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    _RELAY_ENCODER["proc"] = proc
+    _RELAY_ENCODER["archive"] = archive_path
+    logger.info("relay encoder started, archive: %s", archive_path)
+    return True
 
 
 @app.route("/api/radio/relay-segment", methods=["POST"])
 @app.route("/kyosky/api/radio/relay-segment", methods=["POST"])
 def relay_segment():
-    """Receive a single OGG audio segment, convert to .ts, update HLS playlist.
+    """Receive a 4-second OGG segment, decode to PCM, feed persistent HLS encoder.
 
-    Phone loops: record 4 s → POST here → repeat.  No ffmpeg needed on phone.
+    Phone loops: record 4 s → POST here → repeat. No ffmpeg needed on phone.
     Uses password-based auth so it never touches the browser broadcaster session.
+    All segments feed one continuous ffmpeg process — no per-segment PTS resets,
+    no EXT-X-DISCONTINUITY, no gaps between segments.
     """
-    global _HLS_SEG_COUNTER
     password = request.headers.get("X-Broadcast-Password", "")
     if password != BROADCAST_PASSWORD:
         return jsonify({"success": False, "error": "unauthorized"}), 401
@@ -615,80 +612,28 @@ def relay_segment():
     if not ogg_data:
         return "", 400
 
-    os.makedirs(HLS_LIVE_DIR, exist_ok=True)
-
-    with _HLS_SEG_LOCK:
-        n = _HLS_SEG_COUNTER
-        _HLS_SEG_COUNTER += 1
-
-    tmp_ogg = os.path.join(HLS_LIVE_DIR, f"_tmp_{n}.ogg")
-    ts_name = f"seg{n:06d}.ts"
-    ts_path = os.path.join(HLS_LIVE_DIR, ts_name)
-
-    with open(tmp_ogg, "wb") as f:
-        f.write(ogg_data)
-
-    # Convert OGG → MPEG-TS for HLS and → MP3 for archive in one ffmpeg pass
-    with _RELAY_ARCHIVE_LOCK:
-        if _RELAY_ARCHIVE["path"] is None:
-            with RADIO_STATE_LOCK:
-                title = RADIO_STATE["broadcast_title"]
-            safe = "".join(
-                c if c.isalnum() or c in "-_" else "_" for c in title
-            ).strip("_")[:40]
-            ts_stamp = time.strftime("%Y%m%d_%H%M%S")
-            fname = f"live_{safe}_{ts_stamp}.mp3" if safe else f"live_{ts_stamp}.mp3"
-            _RELAY_ARCHIVE["path"] = os.path.join(RADIO_DIR, fname)
-        archive_path = _RELAY_ARCHIVE["path"]
-
-    tmp_mp3 = os.path.join(HLS_LIVE_DIR, f"_arc_{n}.mp3")
+    # Decode OGG → raw PCM (s16le, 44100 Hz, mono) outside the lock
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", tmp_ogg,
-         "-c:a", "aac", "-b:a", "128k", "-f", "mpegts", ts_path,
-         "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", tmp_mp3],
-        capture_output=True,
+        ["ffmpeg", "-y", "-i", "pipe:0",
+         "-f", "s16le", "-ar", "44100", "-ac", "1", "pipe:1"],
+        input=ogg_data, capture_output=True, timeout=15,
     )
-    try:
-        os.unlink(tmp_ogg)
-    except OSError:
-        pass
-
-    if result.returncode != 0 or not os.path.exists(ts_path):
-        logger.error("relay_segment: ffmpeg failed: %s", result.stderr.decode()[-300:])
-        try:
-            os.unlink(tmp_mp3)
-        except OSError:
-            pass
+    if result.returncode != 0 or not result.stdout:
+        logger.error("relay_segment: PCM decode failed: %s", result.stderr[-300:])
         return "", 500
 
-    # Append mp3 chunk to running archive
-    if os.path.exists(tmp_mp3):
-        try:
-            with open(archive_path, "ab") as af, open(tmp_mp3, "rb") as mf:
-                af.write(mf.read())
-        except OSError as e:
-            logger.warning("relay_segment: archive append failed: %s", e)
-        finally:
-            try:
-                os.unlink(tmp_mp3)
-            except OSError:
-                pass
+    pcm = result.stdout
 
-    # Keep last 5 .ts segments; delete older ones
-    all_ts = sorted(
-        f for f in os.listdir(HLS_LIVE_DIR)
-        if f.endswith(".ts") and not f.startswith("_")
-    )
-    while len(all_ts) > 5:
-        old = all_ts.pop(0)
+    with _RELAY_ENCODER_LOCK:
+        if not _ensure_relay_encoder():
+            return "", 500
         try:
-            os.remove(os.path.join(HLS_LIVE_DIR, old))
-        except OSError:
-            pass
-
-    first_n = int(all_ts[0].replace("seg", "").replace(".ts", "")) if all_ts else n
-    _write_hls_playlist(all_ts, first_n)
-    logger.info("relay_segment: wrote segment %d, playlist has %d entries", n, len(all_ts))
+            _RELAY_ENCODER["proc"].stdin.write(pcm)
+            _RELAY_ENCODER["proc"].stdin.flush()
+        except BrokenPipeError:
+            _RELAY_ENCODER["proc"] = None
+            logger.warning("relay_segment: encoder pipe broken, will restart on next segment")
+            return "", 500
 
     # Enable live mode on first segment
     with RADIO_STATE_LOCK:
@@ -990,11 +935,22 @@ def _live_watchdog():
         if os.path.exists(hls_index):
             age = time.time() - os.path.getmtime(hls_index)
             if age > 15:
+                with _RELAY_ENCODER_LOCK:
+                    proc = _RELAY_ENCODER["proc"]
+                    if proc and proc.poll() is None:
+                        try:
+                            proc.stdin.close()
+                        except OSError:
+                            pass
+                        try:
+                            proc.wait(timeout=5)
+                        except Exception:
+                            proc.kill()
+                    _RELAY_ENCODER["proc"] = None
+                    _RELAY_ENCODER["archive"] = None
                 with RADIO_STATE_LOCK:
                     RADIO_STATE["live_mode"] = False
-                with _RELAY_ARCHIVE_LOCK:
-                    _RELAY_ARCHIVE["path"] = None  # next broadcast creates a fresh archive
-                logger.info("Live watchdog: HLS stale for %.0fs, disabling live mode", age)
+                logger.info("Live watchdog: HLS stale for %.0fs, encoder closed", age)
                 _notify_sse_clients(_current_state_dict())
 
 
