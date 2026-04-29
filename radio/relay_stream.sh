@@ -10,18 +10,6 @@ SEG_FILE="$HOME/.relay_seg.ogg"
 
 trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; exit 0' INT TERM
 
-echo "Authenticating..."
-AUTH=$(curl -sf -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"password\":\"$PASSWORD\"}" \
-  "$SERVER/api/radio/auth")
-
-TOKEN=$(echo "$AUTH" | sed 's/.*"token":"\([^"]*\)".*/\1/')
-if [ -z "$TOKEN" ] || [ "$TOKEN" = "$AUTH" ]; then
-  echo "Auth failed: $AUTH"
-  exit 1
-fi
-echo "Authenticated (${TOKEN:0:8}...)"
 echo "Starting segment loop — Ctrl+C to stop."
 
 N=0
@@ -41,9 +29,9 @@ while true; do
     continue
   fi
 
-  # Upload segment to server
+  # Upload segment — password in header, no session token needed
   HTTP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST \
-    -H "X-Auth-Token: $TOKEN" \
+    -H "X-Broadcast-Password: $PASSWORD" \
     -H "Content-Type: audio/ogg" \
     --data-binary @"$SEG_FILE" \
     "$SERVER/api/radio/relay-segment")

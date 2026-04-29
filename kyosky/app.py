@@ -550,10 +550,11 @@ def relay_segment():
     """Receive a single OGG audio segment, convert to .ts, update HLS playlist.
 
     Phone loops: record 4 s → POST here → repeat.  No ffmpeg needed on phone.
+    Uses password-based auth so it never touches the browser broadcaster session.
     """
     global _HLS_SEG_COUNTER
-    token = request.headers.get("X-Auth-Token", "")
-    if not _validate_broadcaster_token(token):
+    password = request.headers.get("X-Broadcast-Password", "")
+    if password != BROADCAST_PASSWORD:
         return jsonify({"success": False, "error": "unauthorized"}), 401
 
     ogg_data = request.stream.read()
