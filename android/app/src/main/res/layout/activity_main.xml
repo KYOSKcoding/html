@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#111111">
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textColor="#00ff00"
+        android:textSize="28sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.15"
+        android:layout_marginBottom="40dp" />
+
+    <!-- Status circle — mirrors website toggle-switch -->
+    <FrameLayout
+        android:id="@+id/statusCircle"
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:background="@drawable/circle_offline"
+        android:layout_marginBottom="32dp">
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="OFFLINE"
+            android:textColor="#ff6600"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.08"
+            android:textStyle="bold" />
+    </FrameLayout>
+
+    <!-- Outlined buttons — website play-button style -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnStart"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="220dp"
+        android:layout_height="56dp"
+        android:text="@string/btn_start"
+        android:fontFamily="monospace"
+        android:textColor="#00ff00"
+        android:textSize="15sp"
+        android:letterSpacing="0.08"
+        app:strokeColor="#00ff00"
+        app:strokeWidth="2dp"
+        app:backgroundTint="@android:color/transparent"
+        app:rippleColor="#1a00ff00"
+        android:layout_marginBottom="14dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnStop"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="220dp"
+        android:layout_height="56dp"
+        android:text="@string/btn_stop"
+        android:fontFamily="monospace"
+        android:textColor="#666666"
+        android:textSize="15sp"
+        android:letterSpacing="0.08"
+        app:strokeColor="#444444"
+        app:strokeWidth="2dp"
+        app:backgroundTint="@android:color/transparent"
+        app:rippleColor="#1a888888"
+        android:enabled="false"
+        android:layout_marginBottom="44dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_volume"
+        android:textColor="#00aa00"
+        android:textSize="13sp"
+        android:fontFamily="monospace"
+        android:layout_marginBottom="8dp" />
+
+    <SeekBar
+        android:id="@+id/seekVolume"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:max="100"
+        android:progress="50"
+        android:progressTint="#00ff00"
+        android:thumbTint="#00ff00"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Tick labels at 0 / 50 / 100 -->
+    <LinearLayout
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0"
+            android:textColor="#00aa00"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:gravity="start" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="50"
+            android:textColor="#00aa00"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="100"
+            android:textColor="#00aa00"
+            android:textSize="10sp"
+            android:fontFamily="monospace"
+            android:gravity="end" />
+    </LinearLayout>
+
+</LinearLayout>
