@@ -466,6 +466,63 @@ def receive_stream():
     return "", 200
 
 
+@app.route("/api/radio/relay-stream", methods=["PUT"])
+@app.route("/kyosky/api/radio/relay-stream", methods=["PUT"])
+def relay_stream():
+    """Accept raw OGG/AAC from a phone without ffmpeg; transcode server-side to HLS."""
+    token = request.headers.get("X-Auth-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    content_type = request.content_type or "audio/ogg"
+    input_fmt = "aac" if "aac" in content_type else "ogg"
+
+    os.makedirs(HLS_LIVE_DIR, exist_ok=True)
+    for f in os.listdir(HLS_LIVE_DIR):
+        try:
+            os.remove(os.path.join(HLS_LIVE_DIR, f))
+        except OSError:
+            pass
+
+    cmd = [
+        "ffmpeg", "-f", input_fmt, "-i", "pipe:0",
+        "-map", "0:a", "-c:a", "libmp3lame", "-b:a", "128k",
+        "-f", "hls", "-hls_time", "3", "-hls_list_size", "5",
+        "-hls_flags", "delete_segments",
+        "-hls_segment_filename", os.path.join(HLS_LIVE_DIR, "seg%03d.ts"),
+        os.path.join(HLS_LIVE_DIR, "index.m3u8"),
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["live_mode"] = True
+    _notify_sse_clients(_current_state_dict())
+    logger.info("relay_stream: live mode on, ffmpeg transcoding %s", input_fmt)
+
+    try:
+        while True:
+            chunk = request.stream.read(4096)
+            if not chunk:
+                break
+            try:
+                proc.stdin.write(chunk)
+                proc.stdin.flush()
+            except BrokenPipeError:
+                break
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        proc.wait(timeout=10)
+        with RADIO_STATE_LOCK:
+            RADIO_STATE["live_mode"] = False
+        _notify_sse_clients(_current_state_dict())
+        logger.info("relay_stream: stream ended, live mode off")
+
+    return "", 200
+
+
 @app.route("/api/radio/live-stream")
 @app.route("/kyosky/api/radio/live-stream")
 def serve_live_stream():
