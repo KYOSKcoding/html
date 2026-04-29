@@ -8,7 +8,7 @@ PASSWORD="broadcast"
 SERVER="https://kyo.sk/kyosky"
 SEG_FILE="$HOME/.relay_seg.ogg"
 
-trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; exit 0' INT TERM
+trap 'echo "Stopping..."; termux-microphone-record -q 2>/dev/null; exit 0' INT TERM HUP
 
 echo "Starting segment loop — Ctrl+C to stop."
 
