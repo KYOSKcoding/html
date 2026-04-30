@@ -163,11 +163,20 @@ class RadioPlayer {
     updateBroadcastTitle(title) {
         if (title === this._lastBroadcastTitle) return;
         this._lastBroadcastTitle = title;
-        // Don't overwrite while broadcaster is actively editing
+        this.updateNowPlaying();
+    }
+
+    updateNowPlaying() {
         if (document.activeElement === this.titleEl) return;
-        this.titleEl.textContent = title || (this.isAuthenticated ? '' : 'Jingle Macker');
         if (this.isAuthenticated) {
+            this.titleEl.textContent = this._lastBroadcastTitle || '';
             this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
+        } else if (this.liveMode || this.livePending) {
+            this.titleEl.textContent = this._lastBroadcastTitle || 'Live';
+        } else {
+            this.titleEl.textContent = this.currentSong
+                ? this.currentSong.replace(/\.mp3$/i, '').replace(/_/g, ' ')
+                : '';
         }
     }
 
@@ -306,6 +315,7 @@ class RadioPlayer {
             this.liveButton.style.display = 'inline-block';
             this.monitorButton.style.display = 'inline-block';
             this.logoutButton.style.display = 'inline-block';
+            this.timeDisplay.style.display = '';
             this.loginLink.style.display = 'none';
             this.titleEl.contentEditable = 'true';
             this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
@@ -315,10 +325,12 @@ class RadioPlayer {
             this.liveButton.style.display = 'none';
             this.monitorButton.style.display = 'none';
             this.logoutButton.style.display = 'none';
+            this.timeDisplay.style.display = 'none';
             this.loginLink.style.display = 'inline-block';
             this.titleEl.contentEditable = 'false';
             this.titleEl.removeAttribute('data-placeholder');
             this.stopMonitor();
+            this.updateNowPlaying();
         }
     }
 
@@ -408,6 +420,7 @@ class RadioPlayer {
             }
             if (this.isListening) this.applyLocalAudio();
 
+            if (data.current_song) this.currentSong = data.current_song;
             if (data.broadcast_title !== undefined) this.updateBroadcastTitle(data.broadcast_title);
             this.clearError();
             this.setStatus('Online', 'online');
@@ -531,6 +544,8 @@ class RadioPlayer {
             }
             this.refreshBroadcasterButtonLabel();
         }
+
+        this.updateNowPlaying();
 
         if (this.liveMode !== this._lastLiveMode || this.livePending !== this._lastLivePending) {
             this._lastLiveMode = this.liveMode;
