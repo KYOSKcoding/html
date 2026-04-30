@@ -6,6 +6,8 @@ class RadioPlayer {
         this.listenButton = document.getElementById('listenButton');
         this.playButton = document.getElementById('playButton');
         this.liveButton = document.getElementById('liveButton');
+        this.monitorButton = document.getElementById('monitorButton');
+        this.monitorAudio = document.getElementById('monitorAudio');
         this.logoutButton = document.getElementById('logoutButton');
         this.statusText = document.getElementById('statusText');
         this.timeDisplay = document.getElementById('timeDisplay');
@@ -43,6 +45,7 @@ class RadioPlayer {
 
         // Server broadcast state
         this.liveMode = false;
+        this.livePending = false;
         this.isPlaying = false;
         this.elapsedTime = 0;
         this.duration = 27.096;
@@ -54,9 +57,14 @@ class RadioPlayer {
         this.audioReady = false;
         this.needsInitialSync = true;
 
+        // Monitor (private broadcaster preview)
+        this._monitorHls = null;
+        this._monitorActive = false;
+
         // Idempotent UI tracking
         this._lastIsPlaying = null;
         this._lastLiveMode = null;
+        this._lastLivePending = null;
         this._lastListening = null;
         this._lastListenDisabled = null;
         this._lastStatusClass = null;
@@ -106,6 +114,7 @@ class RadioPlayer {
         this.listenButton.addEventListener('click', () => this.handleListen());
         this.playButton.addEventListener('click', () => this.handlePlay());
         this.liveButton.addEventListener('click', () => this.handleLiveToggle());
+        this.monitorButton.addEventListener('click', () => this.handleMonitorToggle());
         this.logoutButton.addEventListener('click', () => this.handleLogout());
         this.loginLink.addEventListener('click', (e) => {
             e.preventDefault();
@@ -295,6 +304,7 @@ class RadioPlayer {
             this.playButton.style.display = 'inline-block';
             this.playButton.disabled = !this._playButtonReady;
             this.liveButton.style.display = 'inline-block';
+            this.monitorButton.style.display = 'inline-block';
             this.logoutButton.style.display = 'inline-block';
             this.loginLink.style.display = 'none';
             this.titleEl.contentEditable = 'true';
@@ -303,10 +313,12 @@ class RadioPlayer {
         } else {
             this.playButton.style.display = 'none';
             this.liveButton.style.display = 'none';
+            this.monitorButton.style.display = 'none';
             this.logoutButton.style.display = 'none';
             this.loginLink.style.display = 'inline-block';
             this.titleEl.contentEditable = 'false';
             this.titleEl.removeAttribute('data-placeholder');
+            this.stopMonitor();
         }
     }
 
@@ -378,6 +390,7 @@ class RadioPlayer {
 
             const wasLiveFetch = this.liveMode;
             this.liveMode = data.live_mode || false;
+            this.livePending = data.live_pending || false;
             if (!wasLiveFetch && this.liveMode) this.switchToLive();
             else if (wasLiveFetch && !this.liveMode) this.switchToFile();
 
@@ -421,6 +434,7 @@ class RadioPlayer {
                 // Live mode change — switch audio source for all listeners
                 const wasLive = this.liveMode;
                 this.liveMode = data.live_mode || false;
+                this.livePending = data.live_pending || false;
                 if (!wasLive && this.liveMode) {
                     this.switchToLive();
                 } else if (wasLive && !this.liveMode) {
@@ -518,11 +532,19 @@ class RadioPlayer {
             this.refreshBroadcasterButtonLabel();
         }
 
-        if (this.liveMode !== this._lastLiveMode) {
+        if (this.liveMode !== this._lastLiveMode || this.livePending !== this._lastLivePending) {
             this._lastLiveMode = this.liveMode;
+            this._lastLivePending = this.livePending;
             if (this.isAuthenticated) {
-                this.liveButton.innerHTML = this.liveMode ? '&#9679; Live ON' : '&#9679; Go Live';
+                if (this.liveMode) {
+                    this.liveButton.innerHTML = '&#9679; Live ON';
+                } else if (this.livePending) {
+                    this.liveButton.innerHTML = '&#9679; Waiting…';
+                } else {
+                    this.liveButton.innerHTML = '&#9679; Go Live';
+                }
                 this.liveButton.classList.toggle('active', this.liveMode);
+                this.liveButton.classList.toggle('pending', this.livePending && !this.liveMode);
             }
         }
 
@@ -634,7 +656,7 @@ class RadioPlayer {
     async handleLiveToggle() {
         this.liveButton.disabled = true;
         try {
-            const url = this.liveMode ? this.liveStopUrl : this.liveStartUrl;
+            const url = (this.liveMode || this.livePending) ? this.liveStopUrl : this.liveStartUrl;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: this.broadcasterHeaders()
@@ -693,6 +715,54 @@ class RadioPlayer {
     switchToFile() {
         if (this._hls) { this._hls.destroy(); this._hls = null; }
         this.reloadAudio();
+    }
+
+    handleMonitorToggle() {
+        if (this._monitorActive) {
+            this.stopMonitor();
+        } else {
+            this.startMonitor();
+        }
+    }
+
+    startMonitor() {
+        this._monitorActive = true;
+        this.monitorButton.innerHTML = '&#128266; Monitor ON';
+        this.monitorButton.classList.add('active');
+
+        const url = this.liveHlsUrl;
+        const audio = this.monitorAudio;
+
+        if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+            audio.src = url;
+            audio.load();
+            audio.play().catch(() => {});
+        } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+            this._monitorHls = new Hls();
+            this._monitorHls.loadSource(url);
+            this._monitorHls.attachMedia(audio);
+            this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => {}));
+        } else {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+            s.onload = () => {
+                if (!Hls.isSupported()) { this.showError('HLS not supported'); return; }
+                this._monitorHls = new Hls();
+                this._monitorHls.loadSource(url);
+                this._monitorHls.attachMedia(audio);
+                this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => {}));
+            };
+            document.head.appendChild(s);
+        }
+    }
+
+    stopMonitor() {
+        this._monitorActive = false;
+        this.monitorButton.innerHTML = '&#128266; Monitor';
+        this.monitorButton.classList.remove('active');
+        if (this._monitorHls) { this._monitorHls.destroy(); this._monitorHls = null; }
+        this.monitorAudio.pause();
+        this.monitorAudio.src = '';
     }
 
     highlightActiveSong(filename) {

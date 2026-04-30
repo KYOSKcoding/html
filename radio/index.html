@@ -30,6 +30,9 @@
             <!-- Go Live button (broadcaster only, switches all listeners to mic stream) -->
             <button id="liveButton" class="live-button" style="display: none;">&#9679; Go Live</button>
 
+            <!-- Monitor button (broadcaster only, private preview of live HLS) -->
+            <button id="monitorButton" class="monitor-button" style="display: none;">&#128266; Monitor</button>
+
             <!-- Logout button (broadcaster only) -->
             <button id="logoutButton" class="logout-button" style="display: none;">Logout</button>
 
@@ -69,7 +72,8 @@
         </div>
     </div>
 
-    <script src="radio.js?v=10"></script>
+    <audio id="monitorAudio" style="display:none;"></audio>
+    <script src="radio.js?v=11"></script>
 </body>
 
 </html>

@@ -210,6 +210,44 @@ body {
     cursor: not-allowed;
 }
 
+.live-button.pending {
+    border-color: #ffaa00;
+    color: #ffaa00;
+    background: rgba(255, 170, 0, 0.1);
+    animation: pending-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pending-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.monitor-button {
+    padding: 6px 16px;
+    border: 1px solid #0088ff;
+    background: transparent;
+    color: #0088ff;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.monitor-button:hover {
+    background: rgba(0, 136, 255, 0.15);
+    color: #44aaff;
+    border-color: #44aaff;
+}
+
+.monitor-button.active {
+    background: rgba(0, 136, 255, 0.2);
+    color: #44aaff;
+    border-color: #44aaff;
+    box-shadow: 0 0 10px rgba(0, 136, 255, 0.4);
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;

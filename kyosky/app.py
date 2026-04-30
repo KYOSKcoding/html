@@ -71,6 +71,7 @@ RADIO_STATE = {
     "current_song": _DEFAULT_SONG,
     "audio_duration": _default_duration,
     "live_mode": False,
+    "live_pending": False,  # Go Live clicked, waiting for HLS to become ready
     "broadcast_title": "",
 }
 RADIO_STATE_LOCK = threading.Lock()
@@ -343,6 +344,7 @@ def _current_state_dict() -> dict:
         audio_duration = RADIO_STATE["audio_duration"]
         current_song = RADIO_STATE["current_song"]
         live_mode = RADIO_STATE["live_mode"]
+        live_pending = RADIO_STATE["live_pending"]
     elapsed = (time.time() - last_toggled_time) % audio_duration if is_playing else 0
     return {
         "is_playing": is_playing,
@@ -350,6 +352,7 @@ def _current_state_dict() -> dict:
         "audio_duration": audio_duration,
         "current_song": current_song,
         "live_mode": live_mode,
+        "live_pending": live_pending,
         "broadcast_title": RADIO_STATE["broadcast_title"],
         "timestamp": time.time(),
     }
@@ -427,15 +430,26 @@ def radio_audio():
 @app.route("/api/radio/live/start", methods=["POST"])
 @app.route("/kyosky/api/radio/live/start", methods=["POST"])
 def live_start():
-    """Switch all listeners to live stream — requires valid broadcaster token."""
+    """Switch all listeners to live stream — requires valid broadcaster token.
+
+    If HLS is already ready, enables live_mode immediately. Otherwise sets live_pending=True
+    so the watchdog auto-enables live_mode as soon as fresh HLS segments appear.
+    """
     token = request.headers.get("X-Broadcaster-Token", "")
     if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
+    hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
+    hls_ready = os.path.exists(hls_index) and (time.time() - os.path.getmtime(hls_index) < 10)
     with RADIO_STATE_LOCK:
-        RADIO_STATE["live_mode"] = True
-    logger.info("Live mode enabled")
+        if hls_ready:
+            RADIO_STATE["live_mode"] = True
+            RADIO_STATE["live_pending"] = False
+            logger.info("Live mode enabled (HLS ready)")
+        else:
+            RADIO_STATE["live_pending"] = True
+            logger.info("Live mode pending (HLS not yet ready)")
     _notify_sse_clients(_current_state_dict())
-    return jsonify({"live_mode": True})
+    return jsonify({"live_mode": RADIO_STATE["live_mode"], "live_pending": RADIO_STATE["live_pending"]})
 
 
 @app.route("/api/radio/live/stop", methods=["POST"])
@@ -447,9 +461,10 @@ def live_stop():
         return jsonify({"success": False, "error": "unauthorized"}), 401
     with RADIO_STATE_LOCK:
         RADIO_STATE["live_mode"] = False
+        RADIO_STATE["live_pending"] = False
     logger.info("Live mode disabled")
     _notify_sse_clients(_current_state_dict())
-    return jsonify({"live_mode": False})
+    return jsonify({"live_mode": False, "live_pending": False})
 
 
 @app.route("/api/radio/title", methods=["POST"])
@@ -925,33 +940,64 @@ def run_radar_script(data=None, timeout=300):
 
 
 def _live_watchdog():
-    """Auto-disable live_mode when the HLS stream goes stale (stream dropped without clicking Stop Live)."""
+    """Monitor HLS freshness, auto-enable live_mode when stream appears, auto-disable when stale.
+
+    States:
+      live_pending=True  → broadcaster clicked Go Live, waiting for HLS to become ready
+      live_mode=True     → HLS is fresh, listeners are on live stream
+      both False         → broadcaster explicitly stopped, no auto-reconnect
+    """
+    _stale_since: float = 0.0  # when HLS first went stale while live_mode=True
+
     while True:
         time.sleep(5)
+
         with RADIO_STATE_LOCK:
-            if not RADIO_STATE["live_mode"]:
-                continue
+            live_mode = RADIO_STATE["live_mode"]
+            live_pending = RADIO_STATE["live_pending"]
+
+        if not live_mode and not live_pending:
+            _stale_since = 0.0
+            continue
+
         hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
+        now = time.time()
         if os.path.exists(hls_index):
-            age = time.time() - os.path.getmtime(hls_index)
-            if age > 15:
-                with _RELAY_ENCODER_LOCK:
-                    proc = _RELAY_ENCODER["proc"]
-                    if proc and proc.poll() is None:
-                        try:
-                            proc.stdin.close()
-                        except OSError:
-                            pass
-                        try:
-                            proc.wait(timeout=5)
-                        except Exception:
-                            proc.kill()
-                    _RELAY_ENCODER["proc"] = None
-                    _RELAY_ENCODER["archive"] = None
+            age = now - os.path.getmtime(hls_index)
+        else:
+            age = float("inf")
+
+        if age < 10:
+            # HLS is fresh
+            if live_pending and not live_mode:
+                with RADIO_STATE_LOCK:
+                    RADIO_STATE["live_mode"] = True
+                    RADIO_STATE["live_pending"] = False
+                _stale_since = 0.0
+                logger.info("Live watchdog: HLS ready, auto-enabling live mode")
+                _notify_sse_clients(_current_state_dict())
+            else:
+                _stale_since = 0.0  # reset stale counter while stream is healthy
+
+        elif age > 30:
+            # HLS has gone stale
+            if live_mode:
                 with RADIO_STATE_LOCK:
                     RADIO_STATE["live_mode"] = False
-                logger.info("Live watchdog: HLS stale for %.0fs, encoder closed", age)
+                    RADIO_STATE["live_pending"] = True  # keep pending so reconnect auto-resumes
+                if _stale_since == 0.0:
+                    _stale_since = now
+                logger.info("Live watchdog: HLS stale for %.0fs, switching to pending", age)
                 _notify_sse_clients(_current_state_dict())
+            elif live_pending:
+                if _stale_since == 0.0:
+                    _stale_since = now
+                if now - _stale_since > 90:
+                    # Give up after 90 s with no stream
+                    with RADIO_STATE_LOCK:
+                        RADIO_STATE["live_pending"] = False
+                    logger.info("Live watchdog: 90 s with no stream, clearing live_pending")
+                    _notify_sse_clients(_current_state_dict())
 
 
 def _scheduler_loop(interval_minutes=10):
