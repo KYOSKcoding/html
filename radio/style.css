@@ -223,29 +223,27 @@ body {
 }
 
 .monitor-button {
-    padding: 6px 16px;
-    border: 1px solid #0088ff;
-    background: transparent;
-    color: #0088ff;
+    padding: 12px 40px;
+    border: 2px solid #00ccff;
+    background: rgba(0, 204, 255, 0.1);
+    color: #00ccff;
     font-family: 'Courier New', monospace;
-    font-size: 0.85em;
+    font-size: 1.1em;
+    font-weight: bold;
     border-radius: 4px;
     cursor: pointer;
-    margin-top: 5px;
+    letter-spacing: 2px;
     transition: all 0.3s ease;
 }
 
 .monitor-button:hover {
-    background: rgba(0, 136, 255, 0.15);
-    color: #44aaff;
-    border-color: #44aaff;
+    background: rgba(0, 204, 255, 0.2);
+    box-shadow: 0 0 15px rgba(0, 204, 255, 0.5);
 }
 
 .monitor-button.active {
-    background: rgba(0, 136, 255, 0.2);
-    color: #44aaff;
-    border-color: #44aaff;
-    box-shadow: 0 0 10px rgba(0, 136, 255, 0.4);
+    background: rgba(0, 204, 255, 0.25);
+    box-shadow: 0 0 15px rgba(0, 204, 255, 0.5);
 }
 
 .modal-overlay {
