@@ -1,4 +1,13 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory, Response, redirect, url_for
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_file,
+    send_from_directory,
+    Response,
+    redirect,
+    url_for,
+)
 from flask_cors import CORS
 import subprocess
 import os
@@ -12,22 +21,37 @@ import queue as _queue
 
 try:
     from mutagen.mp3 import MP3 as _MP3
+
     def _get_mp3_duration(filepath: str) -> float:
         try:
             return _MP3(filepath).info.length
         except Exception:
             return 0.0
+
 except ImportError:
+
     def _get_mp3_duration(filepath: str) -> float:
         try:
             import json as _json
+
             r = subprocess.run(
-                ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", filepath],
-                capture_output=True, text=True, timeout=10,
+                [
+                    "ffprobe",
+                    "-v",
+                    "quiet",
+                    "-print_format",
+                    "json",
+                    "-show_format",
+                    filepath,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             return float(_json.loads(r.stdout)["format"]["duration"])
         except Exception:
             return 0.0
+
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -41,6 +65,7 @@ PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
 RADIO_DIR = os.path.join(BASE_DIR, "..", "radio")
 HLS_LIVE_DIR = os.path.join(RADIO_DIR, "live")
+RADIO_CONFIG_FILE = os.path.join(RADIO_DIR, ".radio_config.json")
 
 
 def _scan_songs() -> list:
@@ -59,6 +84,53 @@ def _scan_songs() -> list:
     except Exception as e:
         logger.error(f"Error scanning songs: {e}")
     return songs
+
+
+def _load_radio_config() -> dict:
+    """Load radio config (file order, ignored status) from disk."""
+    if os.path.exists(RADIO_CONFIG_FILE):
+        try:
+            with open(RADIO_CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading radio config: {e}")
+    return {"file_order": [], "ignored_files": []}
+
+
+def _save_radio_config(config: dict):
+    """Save radio config to disk."""
+    try:
+        with open(RADIO_CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        logger.error(f"Error saving radio config: {e}")
+
+
+def _get_files_with_metadata() -> dict:
+    """Return all files with order and ignored status."""
+    config = _load_radio_config()
+    songs = _scan_songs()
+    song_names = {s["filename"] for s in songs}
+
+    # Build ordered list using config's file_order
+    files = []
+    for idx, filename in enumerate(config.get("file_order", [])):
+        if filename in song_names:
+            files.append(
+                {
+                    "filename": filename,
+                    "order": idx,
+                    "ignored": filename in config.get("ignored_files", []),
+                }
+            )
+
+    # Add any files not in config (new files)
+    existing_names = {f["filename"] for f in files}
+    for filename in sorted(song_names):
+        if filename not in existing_names:
+            files.append({"filename": filename, "order": len(files), "ignored": False})
+
+    return {"files": files}
 
 
 _DEFAULT_SONG = "Jingle_Macker.mp3"
@@ -439,7 +511,9 @@ def live_start():
     if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
     hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
-    hls_ready = os.path.exists(hls_index) and (time.time() - os.path.getmtime(hls_index) < 10)
+    hls_ready = os.path.exists(hls_index) and (
+        time.time() - os.path.getmtime(hls_index) < 10
+    )
     with RADIO_STATE_LOCK:
         if hls_ready:
             RADIO_STATE["live_mode"] = True
@@ -449,7 +523,12 @@ def live_start():
             RADIO_STATE["live_pending"] = True
             logger.info("Live mode pending (HLS not yet ready)")
     _notify_sse_clients(_current_state_dict())
-    return jsonify({"live_mode": RADIO_STATE["live_mode"], "live_pending": RADIO_STATE["live_pending"]})
+    return jsonify(
+        {
+            "live_mode": RADIO_STATE["live_mode"],
+            "live_pending": RADIO_STATE["live_pending"],
+        }
+    )
 
 
 @app.route("/api/radio/live/stop", methods=["POST"])
@@ -527,11 +606,27 @@ def relay_stream():
             pass
 
     cmd = [
-        "ffmpeg", "-f", input_fmt, "-i", "pipe:0",
-        "-map", "0:a", "-c:a", "libmp3lame", "-b:a", "128k",
-        "-f", "hls", "-hls_time", "3", "-hls_list_size", "5",
-        "-hls_flags", "delete_segments",
-        "-hls_segment_filename", os.path.join(HLS_LIVE_DIR, "seg%03d.ts"),
+        "ffmpeg",
+        "-f",
+        input_fmt,
+        "-i",
+        "pipe:0",
+        "-map",
+        "0:a",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "128k",
+        "-f",
+        "hls",
+        "-hls_time",
+        "3",
+        "-hls_list_size",
+        "5",
+        "-hls_flags",
+        "delete_segments",
+        "-hls_segment_filename",
+        os.path.join(HLS_LIVE_DIR, "seg%03d.ts"),
         os.path.join(HLS_LIVE_DIR, "index.m3u8"),
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -577,7 +672,9 @@ def _ensure_relay_encoder() -> bool:
 
     with RADIO_STATE_LOCK:
         title = RADIO_STATE["broadcast_title"]
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in title).strip("_")[:40]
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in title).strip("_")[
+        :40
+    ]
     ts_stamp = time.strftime("%Y%m%d_%H%M%S")
     fname = f"live_{safe}_{ts_stamp}.mp3" if safe else f"live_{ts_stamp}.mp3"
     archive_path = os.path.join(RADIO_DIR, fname)
@@ -590,16 +687,41 @@ def _ensure_relay_encoder() -> bool:
             pass
 
     cmd = [
-        "ffmpeg", "-y",
-        "-f", "s16le", "-ar", "44100", "-ac", "1", "-i", "pipe:0",
+        "ffmpeg",
+        "-y",
+        "-f",
+        "s16le",
+        "-ar",
+        "44100",
+        "-ac",
+        "1",
+        "-i",
+        "pipe:0",
         # HLS output — continuous PTS, no discontinuities
-        "-map", "0:a", "-c:a", "aac", "-b:a", "128k",
-        "-f", "hls", "-hls_time", "4", "-hls_list_size", "5",
-        "-hls_flags", "delete_segments",
-        "-hls_segment_filename", os.path.join(HLS_LIVE_DIR, "seg%06d.ts"),
+        "-map",
+        "0:a",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-f",
+        "hls",
+        "-hls_time",
+        "4",
+        "-hls_list_size",
+        "5",
+        "-hls_flags",
+        "delete_segments",
+        "-hls_segment_filename",
+        os.path.join(HLS_LIVE_DIR, "seg%06d.ts"),
         os.path.join(HLS_LIVE_DIR, "index.m3u8"),
         # Archive output
-        "-map", "0:a", "-c:a", "libmp3lame", "-b:a", "128k",
+        "-map",
+        "0:a",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "128k",
         archive_path,
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -629,9 +751,22 @@ def relay_segment():
 
     # Decode OGG → raw PCM (s16le, 44100 Hz, mono) outside the lock
     result = subprocess.run(
-        ["ffmpeg", "-y", "-i", "pipe:0",
-         "-f", "s16le", "-ar", "44100", "-ac", "1", "pipe:1"],
-        input=ogg_data, capture_output=True, timeout=15,
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "pipe:0",
+            "-f",
+            "s16le",
+            "-ar",
+            "44100",
+            "-ac",
+            "1",
+            "pipe:1",
+        ],
+        input=ogg_data,
+        capture_output=True,
+        timeout=15,
     )
     if result.returncode != 0 or not result.stdout:
         logger.error("relay_segment: PCM decode failed: %s", result.stderr[-300:])
@@ -647,7 +782,9 @@ def relay_segment():
             _RELAY_ENCODER["proc"].stdin.flush()
         except BrokenPipeError:
             _RELAY_ENCODER["proc"] = None
-            logger.warning("relay_segment: encoder pipe broken, will restart on next segment")
+            logger.warning(
+                "relay_segment: encoder pipe broken, will restart on next segment"
+            )
             return "", 500
 
     # Enable live mode on first segment
@@ -665,6 +802,7 @@ def relay_segment():
 @app.route("/kyosky/api/radio/live-stream")
 def serve_live_stream():
     """Relay buffered live audio chunks to a browser listener."""
+
     def generate():
         while True:
             try:
@@ -683,8 +821,81 @@ def serve_live_stream():
 @app.route("/api/radio/songs", methods=["GET"])
 @app.route("/kyosky/api/radio/songs", methods=["GET"])
 def radio_songs():
-    """List all available MP3 files with durations."""
-    return jsonify(_scan_songs())
+    """List all available MP3 files with order and ignored status."""
+    return jsonify(_get_files_with_metadata())
+
+
+@app.route("/api/radio/files/ignore", methods=["POST"])
+@app.route("/kyosky/api/radio/files/ignore", methods=["POST"])
+def radio_files_ignore():
+    """Toggle ignored status for a file — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    filename = data.get("filename", "")
+    ignored = data.get("ignored", False)
+
+    # Validate filename
+    if (
+        not filename
+        or os.path.basename(filename) != filename
+        or not filename.lower().endswith(".mp3")
+    ):
+        return jsonify({"success": False, "error": "invalid_filename"}), 400
+
+    config = _load_radio_config()
+    ignored_files = config.get("ignored_files", [])
+
+    if ignored:
+        if filename not in ignored_files:
+            ignored_files.append(filename)
+    else:
+        if filename in ignored_files:
+            ignored_files.remove(filename)
+
+    config["ignored_files"] = ignored_files
+    _save_radio_config(config)
+
+    logger.info(f"File ignore status updated: {filename} = {ignored}")
+    return jsonify({"success": True, "ignored": ignored})
+
+
+@app.route("/api/radio/files/reorder", methods=["POST"])
+@app.route("/kyosky/api/radio/files/reorder", methods=["POST"])
+def radio_files_reorder():
+    """Update file order — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    order = data.get("order", [])
+
+    # Validate order (list of filenames)
+    if not isinstance(order, list):
+        return jsonify({"success": False, "error": "invalid_order"}), 400
+
+    config = _load_radio_config()
+    config["file_order"] = order
+    _save_radio_config(config)
+
+    logger.info(f"File order updated: {len(order)} files")
+    return jsonify({"success": True, "file_order": order})
+
+
+@app.route("/api/radio/files/refresh", methods=["POST"])
+@app.route("/kyosky/api/radio/files/refresh", methods=["POST"])
+def radio_files_refresh():
+    """Rescan disk for new MP3 files — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    # Trigger a rescan (files will be picked up on next radio_songs() call)
+    logger.info("File list refresh requested")
+    return jsonify({"success": True, "files": _get_files_with_metadata()})
 
 
 @app.route("/api/radio/song", methods=["POST"])
@@ -699,7 +910,11 @@ def radio_song_switch():
     filename = data.get("filename", "")
 
     # Validate: only allow plain filenames (no path traversal)
-    if not filename or os.path.basename(filename) != filename or not filename.lower().endswith(".mp3"):
+    if (
+        not filename
+        or os.path.basename(filename) != filename
+        or not filename.lower().endswith(".mp3")
+    ):
         return jsonify({"success": False, "error": "invalid_filename"}), 400
 
     audio_file = os.path.join(RADIO_DIR, filename)
@@ -984,10 +1199,14 @@ def _live_watchdog():
             if live_mode:
                 with RADIO_STATE_LOCK:
                     RADIO_STATE["live_mode"] = False
-                    RADIO_STATE["live_pending"] = True  # keep pending so reconnect auto-resumes
+                    RADIO_STATE["live_pending"] = (
+                        True  # keep pending so reconnect auto-resumes
+                    )
                 if _stale_since == 0.0:
                     _stale_since = now
-                logger.info("Live watchdog: HLS stale for %.0fs, switching to pending", age)
+                logger.info(
+                    "Live watchdog: HLS stale for %.0fs, switching to pending", age
+                )
                 _notify_sse_clients(_current_state_dict())
             elif live_pending:
                 if _stale_since == 0.0:
@@ -996,7 +1215,9 @@ def _live_watchdog():
                     # Give up after 90 s with no stream
                     with RADIO_STATE_LOCK:
                         RADIO_STATE["live_pending"] = False
-                    logger.info("Live watchdog: 90 s with no stream, clearing live_pending")
+                    logger.info(
+                        "Live watchdog: 90 s with no stream, clearing live_pending"
+                    )
                     _notify_sse_clients(_current_state_dict())
 
 

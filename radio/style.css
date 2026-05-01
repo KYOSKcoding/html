@@ -324,6 +324,8 @@ body {
     margin-top: 20px;
     padding-top: 15px;
     border-top: 1px dotted #003300;
+    display: flex;
+    flex-direction: column;
 }
 
 .song-label {
@@ -334,42 +336,126 @@ body {
     margin-bottom: 8px;
 }
 
-.song-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+.file-list {
+    list-style: none;
+    border: 1px solid #003300;
+    border-radius: 4px;
+    max-height: 350px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    background: rgba(0, 50, 0, 0.3);
+    padding: 0;
 }
 
-.song-btn {
-    padding: 6px 14px;
-    border: 1px solid #00aa00;
-    background: transparent;
-    color: #00aa00;
-    font-family: 'Courier New', monospace;
-    font-size: 0.8em;
-    border-radius: 4px;
-    cursor: pointer;
+.file-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(0, 170, 0, 0.2);
+    cursor: move;
     transition: all 0.2s ease;
+    background: transparent;
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-item:hover {
+    background: rgba(0, 170, 0, 0.1);
+}
+
+.file-item.dragging {
+    opacity: 0.6;
+    background: rgba(0, 255, 0, 0.15);
+}
+
+.file-item.drag-over-before {
+    border-top: 2px solid #00ff00;
+}
+
+.file-item.drag-over-after {
+    border-bottom: 2px solid #00ff00;
+}
+
+.file-item.active {
+    background: rgba(0, 255, 0, 0.15);
+    color: #00ff00;
+    font-weight: bold;
+}
+
+.file-item.ignored {
+    opacity: 0.4;
+    color: #006600;
+}
+
+.file-checkbox {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    margin-right: 10px;
+    cursor: pointer;
+    accent-color: #00ff00;
+}
+
+.file-label {
+    flex: 1;
+    font-size: 0.85em;
+    color: #00aa00;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
+    user-select: none;
+    cursor: pointer;
+    transition: color 0.2s;
 }
 
-.song-btn:hover {
-    background: rgba(0, 170, 0, 0.15);
+.file-item:hover .file-label {
+    color: #00ff00;
+}
+
+.drag-handle {
+    color: #00aa00;
+    margin-left: 10px;
+    cursor: grab;
+    font-size: 0.9em;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    user-select: none;
+}
+
+.file-item:hover .drag-handle {
+    opacity: 1;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.import-button {
+    padding: 10px 14px;
+    border: 1px solid #00aa00;
+    background: rgba(0, 170, 0, 0.1);
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.import-button:hover {
+    background: rgba(0, 170, 0, 0.2);
     color: #00ff00;
     border-color: #00ff00;
 }
 
-.song-btn.active {
-    background: rgba(0, 255, 0, 0.15);
-    color: #00ff00;
-    border-color: #00ff00;
-    box-shadow: 0 0 6px rgba(0, 255, 0, 0.3);
+.import-button:active {
+    background: rgba(0, 170, 0, 0.3);
 }
 
-.song-btn:disabled {
+.import-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }

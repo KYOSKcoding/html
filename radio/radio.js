@@ -24,7 +24,14 @@ class RadioPlayer {
 
         // Song selector elements (broadcaster only)
         this.songSection = document.getElementById('songSection');
-        this.songButtonsEl = document.getElementById('songButtons');
+        this.fileList = document.getElementById('fileList');
+        this.importButton = document.getElementById('importButton');
+
+        // File list state
+        this.files = [];  // Array of {filename, order, ignored}
+        this.draggedItem = null;  // For drag-and-drop
+        this.dragOffsetY = 0;
+        this._autoAdvanceInterval = null;
 
         // Broadcast title (editable when authenticated)
         this.titleEl = document.querySelector('.radio-track');
@@ -124,6 +131,7 @@ class RadioPlayer {
         this.authModal.addEventListener('click', (e) => {
             if (e.target === this.authModal) this.closeModal();
         });
+        this.importButton.addEventListener('click', () => this.handleImport());
 
         this.applyAuthVisibility();
         this.setupTitleEditing();
@@ -622,26 +630,291 @@ class RadioPlayer {
         try {
             const response = await fetch(this.songsUrl);
             if (!response.ok) return;
-            const songs = await response.json();
-            this.renderSongButtons(songs);
+            const data = await response.json();
+            // data is {files: [{filename, order, ignored}, ...]}
+            this.files = data.files || [];
+            // Sort by order field
+            this.files.sort((a, b) => a.order - b.order);
+            this.renderFileList();
             this.songSection.style.display = 'block';
         } catch (e) {
-            console.warn('Could not load song list:', e);
+            console.warn('Could not load file list:', e);
         }
     }
 
-    renderSongButtons(songs) {
-        this.songButtonsEl.innerHTML = '';
-        for (const song of songs) {
-            const btn = document.createElement('button');
-            btn.className = 'song-btn';
-            btn.dataset.filename = song.filename;
-            // Display name: strip extension, replace underscores with spaces
-            btn.textContent = song.filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
-            btn.title = song.filename;
-            if (song.filename === this.currentSong) btn.classList.add('active');
-            btn.addEventListener('click', () => this.handleSongSwitch(song.filename));
-            this.songButtonsEl.appendChild(btn);
+    renderFileList() {
+        this.fileList.innerHTML = '';
+        for (const file of this.files) {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.dataset.filename = file.filename;
+            li.draggable = true;
+            if (file.ignored) {
+                li.classList.add('ignored');
+            }
+
+            // Checkbox for ignore
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'file-checkbox';
+            checkbox.checked = !file.ignored;
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                this.handleIgnoreToggle(file.filename, !checkbox.checked);
+            });
+
+            // Filename label (clickable)
+            const label = document.createElement('span');
+            label.className = 'file-label';
+            label.textContent = file.filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+            label.title = file.filename;
+            label.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleSongSwitch(file.filename);
+            });
+
+            // Drag handle
+            const dragHandle = document.createElement('span');
+            dragHandle.className = 'drag-handle';
+            dragHandle.textContent = '⋮';
+            dragHandle.title = 'Drag to reorder';
+
+            // Active indicator
+            if (file.filename === this.currentSong) {
+                li.classList.add('active');
+            }
+
+            li.appendChild(checkbox);
+            li.appendChild(label);
+            li.appendChild(dragHandle);
+
+            // Drag event listeners
+            li.addEventListener('dragstart', (e) => this.handleDragStart(e, li));
+            li.addEventListener('dragover', (e) => this.handleDragOver(e, li));
+            li.addEventListener('dragend', (e) => this.handleDragEnd(e));
+            li.addEventListener('drop', (e) => this.handleDrop(e, li));
+
+            // Touch event listeners for mobile
+            li.addEventListener('touchstart', (e) => this.handleTouchStart(e, li));
+            li.addEventListener('touchmove', (e) => this.handleTouchMove(e, li));
+            li.addEventListener('touchend', (e) => this.handleTouchEnd(e, li));
+
+            this.fileList.appendChild(li);
+        }
+        
+        // Start checking for auto-advance to next file
+        this.startAutoAdvanceCheck();
+    }
+
+    startAutoAdvanceCheck() {
+        // Clear any existing interval
+        if (this._autoAdvanceInterval) {
+            clearInterval(this._autoAdvanceInterval);
+        }
+
+        // Only broadcaster (authenticated) should trigger auto-advance via direct file ops
+        // Listeners follow via SSE, so this is just a safety check
+        if (!this.isAuthenticated) return;
+
+        this._autoAdvanceInterval = setInterval(() => {
+            if (!this.isPlaying || !this.isAuthenticated) return;
+            
+            // Get non-ignored files
+            const availableFiles = this.files.filter(f => !f.ignored);
+            if (availableFiles.length === 0) return;
+
+            // Check if current song is done (elapsed >= duration with some margin)
+            const margin = 0.5; // seconds
+            if (this.elapsedTime >= (this.duration - margin)) {
+                // Find current file and advance to next
+                const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+                if (currentIdx >= 0) {
+                    const nextIdx = (currentIdx + 1) % availableFiles.length;
+                    const nextFile = availableFiles[nextIdx];
+                    if (nextFile) {
+                        this.handleSongSwitch(nextFile.filename);
+                    }
+                }
+            }
+        }, 1000); // Check every second
+    }
+
+    // Drag-and-drop handlers (mouse)
+    handleDragStart(e, li) {
+        this.draggedItem = li;
+        e.dataTransfer.effectAllowed = 'move';
+        li.classList.add('dragging');
+    }
+
+    handleDragOver(e, li) {
+        if (!this.draggedItem || this.draggedItem === li) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        const rect = li.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        if (e.clientY < midpoint) {
+            li.classList.add('drag-over-before');
+            li.classList.remove('drag-over-after');
+        } else {
+            li.classList.remove('drag-over-before');
+            li.classList.add('drag-over-after');
+        }
+    }
+
+    handleDragEnd(e) {
+        document.querySelectorAll('.file-item').forEach(li => {
+            li.classList.remove('dragging', 'drag-over-before', 'drag-over-after');
+        });
+        this.draggedItem = null;
+    }
+
+    handleDrop(e, targetLi) {
+        e.preventDefault();
+        if (!this.draggedItem || this.draggedItem === targetLi) return;
+
+        const sourceName = this.draggedItem.dataset.filename;
+        const targetName = targetLi.dataset.filename;
+
+        const sourceFile = this.files.find(f => f.filename === sourceName);
+        const targetFile = this.files.find(f => f.filename === targetName);
+        if (!sourceFile || !targetFile) return;
+
+        // Determine insertion position
+        const rect = targetLi.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const insertBefore = e.clientY < midpoint;
+
+        // Reorder in array
+        const sourceIdx = this.files.indexOf(sourceFile);
+        const targetIdx = this.files.indexOf(targetFile);
+        this.files.splice(sourceIdx, 1);
+        let newIdx = this.files.indexOf(targetFile);
+        if (!insertBefore) newIdx++;
+        this.files.splice(newIdx, 0, sourceFile);
+
+        // Update order field
+        for (let i = 0; i < this.files.length; i++) {
+            this.files[i].order = i;
+        }
+
+        this.syncFileOrder();
+        this.renderFileList();
+    }
+
+    // Touch handlers for mobile
+    handleTouchStart(e, li) {
+        this.draggedItem = li;
+        this.dragOffsetY = e.touches[0].clientY;
+        li.classList.add('dragging');
+    }
+
+    handleTouchMove(e, li) {
+        if (!this.draggedItem) return;
+        e.preventDefault();
+
+        const touch = e.touches[0];
+        const delta = touch.clientY - this.dragOffsetY;
+
+        // Simple auto-scroll when dragging near list edges
+        const list = this.fileList;
+        if (delta < -50) {
+            list.scrollTop -= 15;
+        } else if (delta > 50) {
+            list.scrollTop += 15;
+        }
+    }
+
+    handleTouchEnd(e, li) {
+        if (!this.draggedItem) return;
+
+        const touch = e.changedTouches[0];
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        const targetLi = elementBelow?.closest('.file-item');
+
+        if (targetLi && targetLi !== this.draggedItem) {
+            const sourceName = this.draggedItem.dataset.filename;
+            const targetName = targetLi.dataset.filename;
+
+            const sourceFile = this.files.find(f => f.filename === sourceName);
+            const targetFile = this.files.find(f => f.filename === targetName);
+            if (sourceFile && targetFile) {
+                const sourceIdx = this.files.indexOf(sourceFile);
+                const targetIdx = this.files.indexOf(targetFile);
+                this.files.splice(sourceIdx, 1);
+                this.files.splice(targetIdx, 0, sourceFile);
+
+                // Update order field
+                for (let i = 0; i < this.files.length; i++) {
+                    this.files[i].order = i;
+                }
+
+                this.syncFileOrder();
+                this.renderFileList();
+            }
+        }
+
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.classList.remove('dragging', 'drag-over-before', 'drag-over-after');
+        });
+        this.draggedItem = null;
+    }
+
+    async handleIgnoreToggle(filename, ignored) {
+        try {
+            const response = await fetch(this.getApiUrl('/api/radio/files/ignore'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ filename, ignored })
+            });
+            if (response.status === 401) {
+                this.handleSessionExpired('Session expired.');
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const file = this.files.find(f => f.filename === filename);
+            if (file) {
+                file.ignored = ignored;
+            }
+            this.renderFileList();
+        } catch (e) {
+            this.showError(`Failed to toggle ignore: ${e.message}`);
+        }
+    }
+
+    async syncFileOrder() {
+        try {
+            const order = this.files.map(f => f.filename);
+            await fetch(this.getApiUrl('/api/radio/files/reorder'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ order })
+            });
+        } catch (e) {
+            this.showError(`Failed to sync file order: ${e.message}`);
+        }
+    }
+
+    async handleImport() {
+        // Refresh the file list from disk
+        try {
+            this.importButton.disabled = true;
+            const response = await fetch(this.getApiUrl('/api/radio/files/refresh'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders()
+            });
+            if (response.status === 401) {
+                this.handleSessionExpired('Session expired.');
+                return;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            await this.loadSongs();
+        } catch (e) {
+            this.showError(`Failed to refresh files: ${e.message}`);
+        } finally {
+            this.importButton.disabled = false;
         }
     }
 
@@ -781,8 +1054,8 @@ class RadioPlayer {
     }
 
     highlightActiveSong(filename) {
-        for (const btn of this.songButtonsEl.querySelectorAll('.song-btn')) {
-            btn.classList.toggle('active', btn.dataset.filename === filename);
+        for (const item of this.fileList.querySelectorAll('.file-item')) {
+            item.classList.toggle('active', item.dataset.filename === filename);
         }
     }
 
