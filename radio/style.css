@@ -218,8 +218,15 @@ body {
 }
 
 @keyframes pending-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
 }
 
 .monitor-button {
@@ -328,12 +335,100 @@ body {
     flex-direction: column;
 }
 
+.song-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
 .song-label {
     font-size: 0.75em;
     color: #00aa00;
     letter-spacing: 2px;
     text-transform: uppercase;
-    margin-bottom: 8px;
+}
+
+.playlist-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.play-pause-btn {
+    padding: 4px 8px;
+    border: 1px solid #00aa00;
+    background: rgba(0, 170, 0, 0.1);
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 30px;
+}
+
+.play-pause-btn:hover {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.15);
+    color: #00ff00;
+}
+
+.play-pause-btn:active {
+    transform: scale(0.95);
+}
+
+.nav-btn {
+    padding: 4px 6px;
+    border: 1px solid #00aa00;
+    background: rgba(0, 170, 0, 0.1);
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 26px;
+}
+
+.nav-btn:hover {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.15);
+    color: #00ff00;
+}
+
+.nav-btn:active {
+    transform: scale(0.95);
+}
+
+.volume-slider {
+    width: 100px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(0, 170, 0, 0.3);
+    outline: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00ff00;
+    cursor: pointer;
+    border: 1px solid #00aa00;
+}
+
+.volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #00ff00;
+    cursor: pointer;
+    border: 1px solid #00aa00;
 }
 
 .file-list {

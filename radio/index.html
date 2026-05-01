@@ -48,7 +48,16 @@
 
         <!-- Song selector (broadcaster only) -->
         <div id="songSection" class="song-section" style="display: none;">
-            <div class="song-label">Playlist</div>
+            <div class="song-header">
+                <div class="song-label">Playlist</div>
+                <div class="playlist-controls">
+                    <button id="prevButton" class="nav-btn" title="Previous">⏮</button>
+                    <button id="playPauseButton" class="play-pause-btn" title="Play/Pause">&#9654;</button>
+                    <button id="nextButton" class="nav-btn" title="Next">⏭</button>
+                    <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100"
+                        title="Volume">
+                </div>
+            </div>
             <ul id="fileList" class="file-list"></ul>
             <button id="importButton" class="import-button">+ Import Files</button>
         </div>
@@ -74,7 +83,7 @@
     </div>
 
     <audio id="monitorAudio" style="display:none;"></audio>
-    <script src="radio.js?v=12"></script>
+    <script src="radio.js?v=14"></script>
 </body>
 
 </html>

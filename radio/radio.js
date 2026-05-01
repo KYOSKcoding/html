@@ -132,6 +132,14 @@ class RadioPlayer {
             if (e.target === this.authModal) this.closeModal();
         });
         this.importButton.addEventListener('click', () => this.handleImport());
+        this.playPauseButton = document.getElementById('playPauseButton');
+        this.volumeSlider = document.getElementById('volumeSlider');
+        this.nextButton = document.getElementById('nextButton');
+        this.prevButton = document.getElementById('prevButton');
+        this.playPauseButton.addEventListener('click', () => this.handlePlayPauseToggle());
+        this.volumeSlider.addEventListener('input', (e) => this.handleVolumeChange(e));
+        this.nextButton.addEventListener('click', () => this.handleNextSong());
+        this.prevButton.addEventListener('click', () => this.handlePrevSong());
 
         this.applyAuthVisibility();
         this.setupTitleEditing();
@@ -190,6 +198,13 @@ class RadioPlayer {
 
     preloadAudio() {
         this.audioElement.src = this.getApiUrl('/api/radio/audio');
+        // Restore saved volume
+        const savedVolume = localStorage.getItem('radio_volume');
+        if (savedVolume) {
+            const vol = Math.max(0, Math.min(100, parseInt(savedVolume) || 100));
+            this.audioElement.volume = vol / 100;
+            this.volumeSlider.value = vol;
+        }
         this.audioElement.addEventListener('canplay', () => {
             this.audioReady = true;
             if (!this.isListening) this.listenButton.innerHTML = '&#9654; Listen';
@@ -312,6 +327,41 @@ class RadioPlayer {
         this.isAuthenticated = false;
         this.applyAuthVisibility();
         this.songSection.style.display = 'none';
+    }
+
+    handlePlayPauseToggle() {
+        if (this.audioElement.paused) {
+            this.audioElement.play().catch(e => console.error('Play error:', e));
+            this.playPauseButton.textContent = '⏸';
+        } else {
+            this.audioElement.pause();
+            this.playPauseButton.textContent = '▶';
+        }
+    }
+
+    handleVolumeChange(e) {
+        const volume = Math.max(0, Math.min(100, parseInt(e.target.value) || 100));
+        e.target.value = volume;
+        this.audioElement.volume = volume / 100;
+        localStorage.setItem('radio_volume', volume);
+    }
+
+    handleNextSong() {
+        if (!this.isAuthenticated) return;
+        const availableFiles = this.files.filter(f => !f.ignored);
+        if (availableFiles.length === 0) return;
+        const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+        const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % availableFiles.length : 0;
+        this.handleSongSwitch(availableFiles[nextIdx].filename);
+    }
+
+    handlePrevSong() {
+        if (!this.isAuthenticated) return;
+        const availableFiles = this.files.filter(f => !f.ignored);
+        if (availableFiles.length === 0) return;
+        const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+        const prevIdx = currentIdx > 0 ? currentIdx - 1 : availableFiles.length - 1;
+        this.handleSongSwitch(availableFiles[prevIdx].filename);
     }
 
     applyAuthVisibility() {
@@ -545,10 +595,12 @@ class RadioPlayer {
                 this.toggleButton.classList.remove('off');
                 this.toggleButton.classList.add('on');
                 this.toggleInner.textContent = 'ON';
+                this.playPauseButton.textContent = '⏸';
             } else {
                 this.toggleButton.classList.remove('on');
                 this.toggleButton.classList.add('off');
                 this.toggleInner.textContent = 'OFF';
+                this.playPauseButton.textContent = '▶';
             }
             this.refreshBroadcasterButtonLabel();
         }
@@ -663,15 +715,11 @@ class RadioPlayer {
                 this.handleIgnoreToggle(file.filename, !checkbox.checked);
             });
 
-            // Filename label (clickable)
+            // Filename label (not clickable anymore - just for display)
             const label = document.createElement('span');
             label.className = 'file-label';
             label.textContent = file.filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
             label.title = file.filename;
-            label.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.handleSongSwitch(file.filename);
-            });
 
             // Drag handle
             const dragHandle = document.createElement('span');
@@ -701,7 +749,7 @@ class RadioPlayer {
 
             this.fileList.appendChild(li);
         }
-        
+
         // Start checking for auto-advance to next file
         this.startAutoAdvanceCheck();
     }
@@ -712,13 +760,10 @@ class RadioPlayer {
             clearInterval(this._autoAdvanceInterval);
         }
 
-        // Only broadcaster (authenticated) should trigger auto-advance via direct file ops
-        // Listeners follow via SSE, so this is just a safety check
-        if (!this.isAuthenticated) return;
-
+        // Auto-advance should work for all users (broadcasters trigger, listeners follow via SSE)
         this._autoAdvanceInterval = setInterval(() => {
             if (!this.isPlaying || !this.isAuthenticated) return;
-            
+
             // Get non-ignored files
             const availableFiles = this.files.filter(f => !f.ignored);
             if (availableFiles.length === 0) return;
@@ -750,7 +795,7 @@ class RadioPlayer {
         if (!this.draggedItem || this.draggedItem === li) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
-        
+
         const rect = li.getBoundingClientRect();
         const midpoint = rect.top + rect.height / 2;
         if (e.clientY < midpoint) {
@@ -872,7 +917,7 @@ class RadioPlayer {
                 return;
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            
+
             const file = this.files.find(f => f.filename === filename);
             if (file) {
                 file.ignored = ignored;
@@ -909,7 +954,7 @@ class RadioPlayer {
                 return;
             }
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            
+
             await this.loadSongs();
         } catch (e) {
             this.showError(`Failed to refresh files: ${e.message}`);
@@ -973,7 +1018,7 @@ class RadioPlayer {
             this.listenButton.disabled = false;
             this._lastListenDisabled = false;
             this.updateListenButton();
-            if (this.isListening) this.audioElement.play().catch(() => {});
+            if (this.isListening) this.audioElement.play().catch(() => { });
         };
 
         if (this.audioElement.canPlayType('application/vnd.apple.mpegurl')) {
@@ -1024,12 +1069,12 @@ class RadioPlayer {
         if (audio.canPlayType('application/vnd.apple.mpegurl')) {
             audio.src = url;
             audio.load();
-            audio.play().catch(() => {});
+            audio.play().catch(() => { });
         } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
             this._monitorHls = new Hls();
             this._monitorHls.loadSource(url);
             this._monitorHls.attachMedia(audio);
-            this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => {}));
+            this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => { }));
         } else {
             const s = document.createElement('script');
             s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
@@ -1038,7 +1083,7 @@ class RadioPlayer {
                 this._monitorHls = new Hls();
                 this._monitorHls.loadSource(url);
                 this._monitorHls.attachMedia(audio);
-                this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => {}));
+                this._monitorHls.on(Hls.Events.MANIFEST_PARSED, () => audio.play().catch(() => { }));
             };
             document.head.appendChild(s);
         }
@@ -1065,7 +1110,7 @@ class RadioPlayer {
         // of inactivity (no toggles), blocking re-login. This fetch keeps last_seen fresh.
         this._heartbeatTimer = setInterval(() => {
             if (this.isAuthenticated) {
-                fetch(this.stateUrl, { headers: this.broadcasterHeaders() }).catch(() => {});
+                fetch(this.stateUrl, { headers: this.broadcasterHeaders() }).catch(() => { });
             }
         }, 60 * 1000);
     }

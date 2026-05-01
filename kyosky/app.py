@@ -63,9 +63,9 @@ CORS(app)  # Enable CORS for all routes
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PLOT_FILE = os.path.join(BASE_DIR, "Meteostat_and_openweathermap_plots_only.html")
 RADAR_VIDEO = os.path.join(BASE_DIR, "radar_png/radar_forecast.mp4")
-RADIO_DIR = os.path.join(BASE_DIR, "..", "radio")
-HLS_LIVE_DIR = os.path.join(RADIO_DIR, "live")
-RADIO_CONFIG_FILE = os.path.join(RADIO_DIR, ".radio_config.json")
+RADIO_DIR = os.path.join(BASE_DIR, "..", "radio", "music")
+HLS_LIVE_DIR = os.path.join(BASE_DIR, "..", "radio", "live")
+RADIO_CONFIG_FILE = os.path.join(BASE_DIR, "..", "radio", ".radio_config.json")
 
 
 def _scan_songs() -> list:
