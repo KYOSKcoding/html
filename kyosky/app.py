@@ -578,7 +578,10 @@ def radio_toggle():
 @app.route("/api/radio/audio")
 @app.route("/kyosky/api/radio/audio")
 def radio_audio():
-    """Serve the currently active song, or redirect to live stream when live_mode is on."""
+    """Serve the currently active song, or redirect to live stream when live_mode is on.
+
+    Supports HTTP range requests for seeking (required for audio slider).
+    """
     with RADIO_STATE_LOCK:
         current_song = RADIO_STATE["current_song"]
         live_mode = RADIO_STATE["live_mode"]
@@ -592,8 +595,39 @@ def radio_audio():
         logger.error(f"Audio file not found: {audio_file}")
         return jsonify({"error": "Audio file not found"}), 404
 
+    file_size = os.path.getsize(audio_file)
+    range_header = request.headers.get('Range')
+
+    if range_header:
+        # Parse range header (e.g., "bytes=0-1024" or "bytes=1024-")
+        try:
+            range_parts = range_header.replace('bytes=', '').split('-')
+            start = int(range_parts[0]) if range_parts[0] else 0
+            end = int(range_parts[1]) if range_parts[1] else file_size - 1
+
+            if start < 0 or start >= file_size or end >= file_size:
+                return "", 416  # Range Not Satisfiable
+
+            # Return 206 Partial Content with the requested range
+            with open(audio_file, 'rb') as f:
+                f.seek(start)
+                data = f.read(end - start + 1)
+
+            response = Response(data, status=206, mimetype='audio/mpeg')
+            response.headers['Content-Range'] = f'bytes {start}-{end}/{file_size}'
+            response.headers['Content-Length'] = str(len(data))
+            response.headers['Accept-Ranges'] = 'bytes'
+            response.headers['Cache-Control'] = 'public, max-age=3600'
+            return response
+        except (ValueError, IndexError):
+            pass
+
+    # Full file request
+    response = send_file(audio_file, mimetype='audio/mpeg')
+    response.headers['Accept-Ranges'] = 'bytes'
+    response.headers['Cache-Control'] = 'public, max-age=3600'
     logger.info(f"Serving audio file: {audio_file}")
-    return send_file(audio_file, mimetype="audio/mpeg")
+    return response
 
 
 @app.route("/api/radio/live/start", methods=["POST"])
