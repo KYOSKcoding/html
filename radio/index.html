@@ -42,6 +42,16 @@
             </div>
         </div>
 
+        <!-- Progress bar -->
+        <div class="progress-container">
+            <input type="range" id="progressBar" class="progress-bar" min="0" max="100" value="0" />
+            <div class="time-info">
+                <span id="currentTime" class="time">0:00</span>
+                <span class="time-separator">/</span>
+                <span id="duration" class="time">0:00</span>
+            </div>
+        </div>
+
         <div class="error-container" id="errorContainer" style="display: none;">
             <div class="error-message" id="errorMessage"></div>
         </div>
@@ -66,7 +76,7 @@
             <a id="loginLink" class="login-link" href="#">Broadcaster</a>
         </div>
 
-        <audio id="radioAudio" preload="none" loop></audio>
+        <audio id="radioAudio" preload="none"></audio>
     </div>
 
     <!-- Auth modal -->

@@ -158,6 +158,9 @@ BROADCASTER_TIMEOUT = (
     300  # seconds without heartbeat before another device can take over
 )
 
+# Flag to prevent recursive SSE notifications during auto-advance
+_NOTIFYING_SSE = False
+
 # SSE (Server-Sent Events) — per-client queues for instant push on state change
 SSE_CLIENT_QUEUES: dict = {}  # thread_id → queue.Queue
 SSE_CLIENTS_LOCK = threading.Lock()
@@ -408,8 +411,39 @@ def radio_logout():
     return jsonify({"success": False, "error": "invalid_token"}), 401
 
 
+def _get_next_song(current_filename: str) -> str:
+    """Find and return the next non-ignored song in playlist order.
+
+    Returns the next song filename, or the same song if no playlist available.
+    Wraps around to first song when at end.
+    """
+    try:
+        files_meta = _get_files_with_metadata()
+        available = [f["filename"] for f in files_meta["files"] if not f["ignored"]]
+        if not available:
+            return current_filename
+
+        current_idx = next(
+            (i for i, f in enumerate(available) if f == current_filename), -1
+        )
+        if current_idx < 0:
+            return available[0]
+
+        next_idx = (current_idx + 1) % len(available)
+        return available[next_idx]
+    except Exception as e:
+        logger.error(f"Error finding next song: {e}")
+        return current_filename
+
+
 def _current_state_dict() -> dict:
-    """Return current radio state as a dict (thread-safe)."""
+    """Return current radio state as a dict (thread-safe).
+
+    Auto-advances to next song when current song finishes and broadcast is playing.
+    Side effect: May modify RADIO_STATE and notify SSE clients if auto-advance occurs.
+    """
+    global _NOTIFYING_SSE
+
     with RADIO_STATE_LOCK:
         is_playing = RADIO_STATE["is_playing"]
         last_toggled_time = RADIO_STATE["last_toggled_time"]
@@ -417,7 +451,61 @@ def _current_state_dict() -> dict:
         current_song = RADIO_STATE["current_song"]
         live_mode = RADIO_STATE["live_mode"]
         live_pending = RADIO_STATE["live_pending"]
-    elapsed = (time.time() - last_toggled_time) % audio_duration if is_playing else 0
+
+    # Calculate elapsed time WITHOUT modulo — modulo wraps time back to 0 preventing auto-advance
+    elapsed = (time.time() - last_toggled_time) if is_playing else 0
+
+    # Detect when song has finished playing
+    has_finished = (
+        is_playing
+        and not live_mode
+        and audio_duration > 0
+        and elapsed >= audio_duration
+    )
+
+    if has_finished:
+        next_song = _get_next_song(current_song)
+        if next_song != current_song:
+            with RADIO_STATE_LOCK:
+                RADIO_STATE["current_song"] = next_song
+                RADIO_STATE["last_toggled_time"] = time.time()
+                current_song = next_song
+                audio_duration = _get_mp3_duration(os.path.join(RADIO_DIR, next_song))
+                RADIO_STATE["audio_duration"] = audio_duration
+            elapsed = 0
+            logger.info(
+                f"✓ AUTO-ADVANCED: {next_song} (duration={audio_duration:.1f}s)"
+            )
+
+            # Notify SSE clients immediately of the new state (guard against recursive calls)
+            if not _NOTIFYING_SSE:
+                _NOTIFYING_SSE = True
+                try:
+                    state = {
+                        "is_playing": is_playing,
+                        "elapsed_time": 0,
+                        "audio_duration": audio_duration,
+                        "current_song": current_song,
+                        "live_mode": live_mode,
+                        "live_pending": live_pending,
+                        "broadcast_title": RADIO_STATE["broadcast_title"],
+                        "timestamp": time.time(),
+                    }
+                    _notify_sse_clients(state)
+                finally:
+                    _NOTIFYING_SSE = False
+
+            return {
+                "is_playing": is_playing,
+                "elapsed_time": 0,
+                "audio_duration": audio_duration,
+                "current_song": current_song,
+                "live_mode": live_mode,
+                "live_pending": live_pending,
+                "broadcast_title": RADIO_STATE["broadcast_title"],
+                "timestamp": time.time(),
+            }
+
     return {
         "is_playing": is_playing,
         "elapsed_time": elapsed,
@@ -438,6 +526,15 @@ def _notify_sse_clients(state_data: dict):
                 q.put_nowait(state_data)
             except _queue.Full:
                 pass
+
+
+@app.route("/api/radio/validate-token", methods=["POST"])
+@app.route("/kyosky/api/radio/validate-token", methods=["POST"])
+def validate_token():
+    """Validate broadcaster token. Returns {valid: true/false}."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    is_valid = _validate_broadcaster_token(token) if token else False
+    return jsonify({"valid": is_valid})
 
 
 @app.route("/api/radio/state", methods=["GET"])
@@ -1156,6 +1253,7 @@ def run_radar_script(data=None, timeout=300):
 
 def _live_watchdog():
     """Monitor HLS freshness, auto-enable live_mode when stream appears, auto-disable when stale.
+    Also handles auto-advance of songs when they finish.
 
     States:
       live_pending=True  → broadcaster clicked Go Live, waiting for HLS to become ready
@@ -1166,6 +1264,10 @@ def _live_watchdog():
 
     while True:
         time.sleep(5)
+
+        # Check if song has finished and auto-advance to next
+        # _current_state_dict() will handle auto-advance and notify SSE clients
+        _current_state_dict()
 
         with RADIO_STATE_LOCK:
             live_mode = RADIO_STATE["live_mode"]

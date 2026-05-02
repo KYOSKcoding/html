@@ -701,6 +701,87 @@ body {
     display: none;
 }
 
+#monitorAudio {
+    display: none;
+}
+
+/* Progress bar styles */
+.progress-container {
+    margin: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    appearance: none;
+    -webkit-appearance: none;
+    background: rgba(0, 255, 0, 0.1);
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+}
+
+.progress-bar::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ff00;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.progress-bar::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ff00;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.progress-bar::-webkit-slider-runnable-track {
+    background: rgba(0, 255, 0, 0.1);
+    height: 8px;
+    border-radius: 4px;
+}
+
+.progress-bar::-moz-range-track {
+    background: transparent;
+    border: none;
+}
+
+.time-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85em;
+    color: #00aa00;
+}
+
+.time {
+    font-family: 'Courier New', monospace;
+    min-width: 40px;
+}
+
+.time-separator {
+    margin: 0 5px;
+}
+
+#currentTime {
+    text-align: left;
+}
+
+#duration {
+    text-align: right;
+}
+
 /* Responsive design */
 @media (max-width: 600px) {
     .radio-container {

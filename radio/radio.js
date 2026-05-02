@@ -27,11 +27,18 @@ class RadioPlayer {
         this.fileList = document.getElementById('fileList');
         this.importButton = document.getElementById('importButton');
 
+        // Progress bar elements
+        this.progressBar = document.getElementById('progressBar');
+        this.currentTimeEl = document.getElementById('currentTime');
+        this.durationEl = document.getElementById('duration');
+        this._userSeeking = false;  // Flag to prevent updates while user drags
+
         // File list state
         this.files = [];  // Array of {filename, order, ignored}
         this.draggedItem = null;  // For drag-and-drop
         this.dragOffsetY = 0;
         this._autoAdvanceInterval = null;
+        this._lastAutoAdvancedSong = null;  // Track which song we auto-advanced from to prevent loops
 
         // Broadcast title (editable when authenticated)
         this.titleEl = document.querySelector('.radio-track');
@@ -141,6 +148,22 @@ class RadioPlayer {
         this.nextButton.addEventListener('click', () => this.handleNextSong());
         this.prevButton.addEventListener('click', () => this.handlePrevSong());
 
+        // Progress bar listeners
+        this.progressBar.addEventListener('mousedown', () => { this._userSeeking = true; });
+        this.progressBar.addEventListener('touchstart', () => { this._userSeeking = true; });
+        this.progressBar.addEventListener('mouseup', (e) => this.handleSeek(e));
+        this.progressBar.addEventListener('touchend', (e) => this.handleSeek(e));
+        this.progressBar.addEventListener('input', (e) => this.handleSeek(e));
+
+        // Validate stored token on startup
+        if (this.isAuthenticated) {
+            this.validateStoredToken().then(isValid => {
+                if (!isValid) {
+                    this.clearLocalAuth();
+                }
+            });
+        }
+
         this.applyAuthVisibility();
         this.setupTitleEditing();
         this.preloadAudio();
@@ -215,6 +238,24 @@ class RadioPlayer {
             this.showError('Failed to load audio');
             this.listenButton.innerHTML = 'Audio unavailable';
         }, { once: true });
+        // Update progress bar during playback
+        this.audioElement.addEventListener('timeupdate', () => {
+            if (!this._userSeeking) {
+                this.updateProgressBar();
+            }
+        });
+        // Handle song ending — fetch fresh state and reload if new song available
+        this.audioElement.addEventListener('ended', () => {
+            console.log('[AUDIO ENDED] Fetching fresh state');
+            this.fetchState().then(ok => {
+                if (ok && this.isListening && this.isPlaying) {
+                    console.log('[AUDIO ENDED] New state received, playing');
+                    this.audioElement.play().catch(e => {
+                        console.warn('[AUDIO ENDED] Play failed:', e);
+                    });
+                }
+            });
+        });
         this.audioElement.load();
     }
 
@@ -264,6 +305,36 @@ class RadioPlayer {
         this.passwordInput.value = '';
         this.authStatus.textContent = '';
         this.authStatus.className = 'auth-status';
+    }
+
+    async validateStoredToken() {
+        // Validate the stored broadcaster token on app startup.
+        // Returns true if token is valid, false if expired/invalid.
+        if (!this.broadcasterToken) return false;
+
+        try {
+            const response = await fetch(this.getApiUrl('/api/radio/validate-token'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' })
+            });
+
+            if (response.status === 401) {
+                console.warn('Token validation failed: 401 Unauthorized');
+                return false;
+            }
+
+            if (!response.ok) {
+                console.warn('Token validation request failed:', response.status);
+                return false;
+            }
+
+            const data = await response.json();
+            return data.valid === true;
+        } catch (error) {
+            console.warn('Error validating stored token:', error);
+            // If we can't reach the server, assume token might be valid (offline scenario)
+            return true;
+        }
     }
 
     async handleAuth() {
@@ -515,6 +586,7 @@ class RadioPlayer {
                 // Song changed — reload audio from server (elapsed resets to near 0)
                 if (!this.liveMode && data.current_song && data.current_song !== this.currentSong) {
                     this.currentSong = data.current_song;
+                    this._lastAutoAdvancedSong = null;  // Reset auto-advance tracker when song actually changes
                     this.highlightActiveSong(data.current_song);
                     this.reloadAudio();
                 }
@@ -647,6 +719,23 @@ class RadioPlayer {
         return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
+    updateProgressBar() {
+        if (!this.audioElement || !this.audioElement.duration) return;
+        const progress = (this.audioElement.currentTime / this.audioElement.duration) * 100;
+        this.progressBar.value = Math.max(0, Math.min(100, progress));
+        this.currentTimeEl.textContent = this.formatTime(this.audioElement.currentTime);
+        this.durationEl.textContent = this.formatTime(this.audioElement.duration);
+    }
+
+    handleSeek(e) {
+        if (!this.audioElement || !this.audioElement.duration) return;
+        const percent = this.progressBar.value;
+        const newTime = (percent / 100) * this.audioElement.duration;
+        this.audioElement.currentTime = newTime;
+        this._userSeeking = false;
+        this.updateProgressBar();
+    }
+
     showError(message) {
         this.errorMessage.textContent = message;
         this.errorContainer.style.display = 'block';
@@ -664,12 +753,19 @@ class RadioPlayer {
         this.audioReady = false;
         this.needsInitialSync = true;
         if (!this.audioElement.paused) this.audioElement.pause();
+        // Reset progress bar for new song
+        this.progressBar.value = 0;
+        this.currentTimeEl.textContent = '0:00';
         this.audioElement.src = this.getApiUrl('/api/radio/audio') + '?t=' + Date.now();
         this.audioElement.addEventListener('canplay', () => {
             this.audioReady = true;
             this.listenButton.disabled = false;
             this._lastListenDisabled = false;
             this.updateListenButton();
+            // Update duration display when audio is ready
+            if (this.audioElement.duration) {
+                this.durationEl.textContent = this.formatTime(this.audioElement.duration);
+            }
             if (this.isListening && this.isPlaying) this.applyLocalAudio();
         }, { once: true });
         this.audioElement.addEventListener('error', () => {
@@ -771,12 +867,16 @@ class RadioPlayer {
             // Check if current song is done (elapsed >= duration with some margin)
             const margin = 0.5; // seconds
             if (this.elapsedTime >= (this.duration - margin)) {
+                // Only auto-advance once per song — skip if we've already initiated a switch for this song
+                if (this._lastAutoAdvancedSong === this.currentSong) return;
+
                 // Find current file and advance to next
                 const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
                 if (currentIdx >= 0) {
                     const nextIdx = (currentIdx + 1) % availableFiles.length;
                     const nextFile = availableFiles[nextIdx];
                     if (nextFile) {
+                        this._lastAutoAdvancedSong = this.currentSong;  // Mark that we initiated the advance from this song
                         this.handleSongSwitch(nextFile.filename);
                     }
                 }
