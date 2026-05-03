@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Radio - kyo.sk</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 
 <body>
@@ -39,6 +39,7 @@
             <div class="status-indicator">
                 <span id="statusText" class="status-text">Offline</span>
                 <span id="timeDisplay" class="time-display">00:00</span>
+                <span id="listenerCount" class="listener-count" style="display: none;">👥 0</span>
             </div>
         </div>
 
@@ -64,6 +65,7 @@
                     <button id="prevButton" class="nav-btn" title="Previous">⏮</button>
                     <button id="playPauseButton" class="play-pause-btn" title="Play/Pause">&#9654;</button>
                     <button id="nextButton" class="nav-btn" title="Next">⏭</button>
+                    <button id="shuffleButton" class="shuffle-btn" title="Shuffle">⇄</button>
                     <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="100"
                         title="Volume">
                 </div>
@@ -93,7 +95,7 @@
     </div>
 
     <audio id="monitorAudio" style="display:none;"></audio>
-    <script src="radio.js?v=15"></script>
+    <script src="radio.js?v=16"></script>
 </body>
 
 </html>

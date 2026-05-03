@@ -11,6 +11,7 @@ class RadioPlayer {
         this.logoutButton = document.getElementById('logoutButton');
         this.statusText = document.getElementById('statusText');
         this.timeDisplay = document.getElementById('timeDisplay');
+        this.listenerCountEl = document.getElementById('listenerCount');
         this.errorContainer = document.getElementById('errorContainer');
         this.errorMessage = document.getElementById('errorMessage');
 
@@ -38,6 +39,7 @@ class RadioPlayer {
         this.draggedItem = null;  // For drag-and-drop
         this.dragOffsetY = 0;
         this._autoAdvanceInterval = null;
+        this._listenerCountInterval = null;
         this._lastAutoAdvancedSong = null;  // Track which song we auto-advanced from to prevent loops
 
         // Broadcast title (editable when authenticated)
@@ -51,6 +53,8 @@ class RadioPlayer {
         this.logoutUrl = this.getApiUrl('/api/radio/logout');
         this.songsUrl = this.getApiUrl('/api/radio/songs');
         this.songSwitchUrl = this.getApiUrl('/api/radio/song');
+        this.listenerCountUrl = this.getApiUrl('/api/radio/listener-count');
+        this.shuffleUrl = this.getApiUrl('/api/radio/shuffle');
         this.liveStartUrl = this.getApiUrl('/api/radio/live/start');
         this.liveStopUrl = this.getApiUrl('/api/radio/live/stop');
         // HLS served at /radio/live/ — not under /kyosky prefix
@@ -65,6 +69,7 @@ class RadioPlayer {
         this.duration = 27.096;
         this.fetchTimestamp = Date.now();
         this.currentSong = null;  // updated from SSE
+        this.shuffle = false;  // updated from SSE
 
         // Local listen state
         this.isListening = false;
@@ -143,10 +148,12 @@ class RadioPlayer {
         this.volumeSlider = document.getElementById('volumeSlider');
         this.nextButton = document.getElementById('nextButton');
         this.prevButton = document.getElementById('prevButton');
+        this.shuffleButton = document.getElementById('shuffleButton');
         this.playPauseButton.addEventListener('click', () => this.handlePlayPauseToggle());
         this.volumeSlider.addEventListener('input', (e) => this.handleVolumeChange(e));
         this.nextButton.addEventListener('click', () => this.handleNextSong());
         this.prevButton.addEventListener('click', () => this.handlePrevSong());
+        this.shuffleButton.addEventListener('click', () => this.handleShuffleToggle());
 
         // Progress bar listeners
         this.progressBar.addEventListener('mousedown', () => { this._userSeeking = true; });
@@ -280,7 +287,10 @@ class RadioPlayer {
         if (this.needsInitialSync) {
             this.needsInitialSync = false;
             try {
-                this.audioElement.currentTime = this.elapsedTime % this.duration;
+                const interpolated = this.isPlaying
+                    ? this.elapsedTime + (Date.now() - this.fetchTimestamp) / 1000
+                    : this.elapsedTime;
+                this.audioElement.currentTime = interpolated % this.duration;
             } catch (e) { }
         }
 
@@ -412,18 +422,52 @@ class RadioPlayer {
         if (!this.isAuthenticated) return;
         const availableFiles = this.files.filter(f => !f.ignored);
         if (availableFiles.length === 0) return;
-        const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
-        const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % availableFiles.length : 0;
-        this.handleSongSwitch(availableFiles[nextIdx].filename);
+
+        let nextFile;
+        if (this.shuffle) {
+            // Pick random song, preferring a different one
+            const others = availableFiles.filter(f => f.filename !== this.currentSong);
+            nextFile = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : availableFiles[0];
+        } else {
+            const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+            const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % availableFiles.length : 0;
+            nextFile = availableFiles[nextIdx];
+        }
+        this.handleSongSwitch(nextFile.filename);
     }
 
     handlePrevSong() {
         if (!this.isAuthenticated) return;
         const availableFiles = this.files.filter(f => !f.ignored);
         if (availableFiles.length === 0) return;
-        const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
-        const prevIdx = currentIdx > 0 ? currentIdx - 1 : availableFiles.length - 1;
-        this.handleSongSwitch(availableFiles[prevIdx].filename);
+
+        let prevFile;
+        if (this.shuffle) {
+            // Pick random song, preferring a different one
+            const others = availableFiles.filter(f => f.filename !== this.currentSong);
+            prevFile = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : availableFiles[0];
+        } else {
+            const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+            const prevIdx = currentIdx > 0 ? currentIdx - 1 : availableFiles.length - 1;
+            prevFile = availableFiles[prevIdx];
+        }
+        this.handleSongSwitch(prevFile.filename);
+    }
+
+    async handleShuffleToggle() {
+        if (!this.isAuthenticated) return;
+        try {
+            const response = await fetch(this.shuffleUrl, {
+                method: 'POST',
+                headers: this.broadcasterHeaders()
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const data = await response.json();
+            this.shuffle = data.shuffle;
+            this.updateUI();
+        } catch (e) {
+            this.showError(`Failed to toggle shuffle: ${e.message}`);
+        }
     }
 
     applyAuthVisibility() {
@@ -440,17 +484,21 @@ class RadioPlayer {
             this.titleEl.contentEditable = 'true';
             this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
             this.progressBar.disabled = false;
+            this.listenerCountEl.style.display = '';
             this.refreshBroadcasterButtonLabel();
+            this.startListenerCountPolling();
         } else {
             this.playButton.style.display = 'none';
             this.liveButton.style.display = 'none';
             this.monitorButton.style.display = 'none';
             this.logoutButton.style.display = 'none';
             this.timeDisplay.style.display = 'none';
+            this.listenerCountEl.style.display = 'none';
             this.loginLink.style.display = 'inline-block';
             this.titleEl.contentEditable = 'false';
             this.titleEl.removeAttribute('data-placeholder');
             this.progressBar.disabled = true;
+            this.stopListenerCountPolling();
             this.stopMonitor();
             this.updateNowPlaying();
         }
@@ -532,6 +580,7 @@ class RadioPlayer {
             this.isPlaying = data.is_playing;
             this.elapsedTime = data.elapsed_time;
             this.duration = data.audio_duration;
+            this.shuffle = data.shuffle || false;
             this.fetchTimestamp = Date.now();
 
             if (!wasPlaying && this.isPlaying) {
@@ -596,6 +645,7 @@ class RadioPlayer {
                 this.isPlaying = data.is_playing;
                 this.elapsedTime = data.elapsed_time;
                 this.duration = data.audio_duration;
+                this.shuffle = data.shuffle || false;
                 this.fetchTimestamp = Date.now();
 
                 if (!wasPlaying && this.isPlaying) {
@@ -692,6 +742,11 @@ class RadioPlayer {
                 this.liveButton.classList.toggle('active', this.liveMode);
                 this.liveButton.classList.toggle('pending', this.livePending && !this.liveMode);
             }
+        }
+
+        if (this.shuffle !== this._lastShuffle) {
+            this._lastShuffle = this.shuffle;
+            this.shuffleButton.classList.toggle('active', this.shuffle);
         }
 
         // Listen button is gated only by whether the audio blob has loaded —
@@ -874,15 +929,24 @@ class RadioPlayer {
                 // Only auto-advance once per song — skip if we've already initiated a switch for this song
                 if (this._lastAutoAdvancedSong === this.currentSong) return;
 
-                // Find current file and advance to next
-                const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
-                if (currentIdx >= 0) {
-                    const nextIdx = (currentIdx + 1) % availableFiles.length;
-                    const nextFile = availableFiles[nextIdx];
-                    if (nextFile) {
-                        this._lastAutoAdvancedSong = this.currentSong;  // Mark that we initiated the advance from this song
-                        this.handleSongSwitch(nextFile.filename);
+                // Advance to next song (shuffle or sequential)
+                let nextFile;
+                if (this.shuffle) {
+                    // Pick random song, preferring a different one
+                    const others = availableFiles.filter(f => f.filename !== this.currentSong);
+                    nextFile = others.length > 0 ? others[Math.floor(Math.random() * others.length)] : availableFiles[0];
+                } else {
+                    const currentIdx = availableFiles.findIndex(f => f.filename === this.currentSong);
+                    if (currentIdx >= 0) {
+                        const nextIdx = (currentIdx + 1) % availableFiles.length;
+                        nextFile = availableFiles[nextIdx];
+                    } else {
+                        nextFile = availableFiles[0];
                     }
+                }
+                if (nextFile) {
+                    this._lastAutoAdvancedSong = this.currentSong;
+                    this.handleSongSwitch(nextFile.filename);
                 }
             }
         }, 1000); // Check every second
@@ -1217,6 +1281,36 @@ class RadioPlayer {
                 fetch(this.stateUrl, { headers: this.broadcasterHeaders() }).catch(() => { });
             }
         }, 60 * 1000);
+    }
+
+    startListenerCountPolling() {
+        // Stop any existing polling
+        if (this._listenerCountInterval) {
+            clearInterval(this._listenerCountInterval);
+        }
+        // Poll every 5 seconds
+        this._listenerCountInterval = setInterval(() => {
+            fetch(this.listenerCountUrl)
+                .then(r => r.json())
+                .then(data => {
+                    this.listenerCountEl.textContent = `👥 ${data.count}`;
+                })
+                .catch(() => { });
+        }, 5 * 1000);
+        // Fetch immediately on start
+        fetch(this.listenerCountUrl)
+            .then(r => r.json())
+            .then(data => {
+                this.listenerCountEl.textContent = `👥 ${data.count}`;
+            })
+            .catch(() => { });
+    }
+
+    stopListenerCountPolling() {
+        if (this._listenerCountInterval) {
+            clearInterval(this._listenerCountInterval);
+            this._listenerCountInterval = null;
+        }
     }
 
     disconnect() {

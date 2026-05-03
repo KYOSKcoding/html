@@ -18,6 +18,7 @@ import secrets
 import threading
 import time
 import queue as _queue
+import random
 
 try:
     from mutagen.mp3 import MP3 as _MP3
@@ -145,6 +146,7 @@ RADIO_STATE = {
     "live_mode": False,
     "live_pending": False,  # Go Live clicked, waiting for HLS to become ready
     "broadcast_title": "",
+    "shuffle": False,
 }
 RADIO_STATE_LOCK = threading.Lock()
 
@@ -412,15 +414,21 @@ def radio_logout():
 
 
 def _get_next_song(current_filename: str) -> str:
-    """Find and return the next non-ignored song in playlist order.
+    """Find and return the next non-ignored song in playlist order or randomly if shuffle is on.
 
     Returns the next song filename, or the same song if no playlist available.
-    Wraps around to first song when at end.
     """
     try:
         files_meta = _get_files_with_metadata()
         available = [f["filename"] for f in files_meta["files"] if not f["ignored"]]
         if not available:
+            return current_filename
+
+        # If shuffle is enabled, pick a random song (prefer a different one)
+        if RADIO_STATE.get("shuffle", False):
+            others = [f for f in available if f != current_filename]
+            if others:
+                return random.choice(others)
             return current_filename
 
         current_idx = next(
@@ -489,6 +497,7 @@ def _current_state_dict() -> dict:
                         "live_mode": live_mode,
                         "live_pending": live_pending,
                         "broadcast_title": RADIO_STATE["broadcast_title"],
+                        "shuffle": RADIO_STATE["shuffle"],
                         "timestamp": time.time(),
                     }
                     _notify_sse_clients(state)
@@ -503,6 +512,7 @@ def _current_state_dict() -> dict:
                 "live_mode": live_mode,
                 "live_pending": live_pending,
                 "broadcast_title": RADIO_STATE["broadcast_title"],
+                "shuffle": RADIO_STATE["shuffle"],
                 "timestamp": time.time(),
             }
 
@@ -514,6 +524,7 @@ def _current_state_dict() -> dict:
         "live_mode": live_mode,
         "live_pending": live_pending,
         "broadcast_title": RADIO_STATE["broadcast_title"],
+        "shuffle": RADIO_STATE["shuffle"],
         "timestamp": time.time(),
     }
 
@@ -535,6 +546,15 @@ def validate_token():
     token = request.headers.get("X-Broadcaster-Token", "")
     is_valid = _validate_broadcaster_token(token) if token else False
     return jsonify({"valid": is_valid})
+
+
+@app.route("/api/radio/listener-count", methods=["GET"])
+@app.route("/kyosky/api/radio/listener-count", methods=["GET"])
+def radio_listener_count():
+    """Get current number of connected SSE listeners."""
+    with SSE_CLIENTS_LOCK:
+        count = len(SSE_CLIENT_QUEUES)
+    return jsonify({"count": count})
 
 
 @app.route("/api/radio/state", methods=["GET"])
@@ -570,6 +590,32 @@ def radio_toggle():
         {
             "success": True,
             "is_playing": is_playing,
+            "timestamp": time.time(),
+        }
+    )
+
+
+@app.route("/api/radio/shuffle", methods=["POST"])
+@app.route("/kyosky/api/radio/shuffle", methods=["POST"])
+def radio_shuffle():
+    """Toggle shuffle mode — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    with RADIO_STATE_LOCK:
+        RADIO_STATE["shuffle"] = not RADIO_STATE.get("shuffle", False)
+        shuffle = RADIO_STATE["shuffle"]
+
+    logger.info(f"Shuffle toggled: now {'enabled' if shuffle else 'disabled'}")
+
+    state = _current_state_dict()
+    _notify_sse_clients(state)
+
+    return jsonify(
+        {
+            "success": True,
+            "shuffle": shuffle,
             "timestamp": time.time(),
         }
     )
