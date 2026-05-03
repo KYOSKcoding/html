@@ -230,7 +230,7 @@ class RadioPlayer {
         }
         this.audioElement.addEventListener('canplay', () => {
             this.audioReady = true;
-            if (!this.isListening) this.listenButton.innerHTML = '&#9654; Listen';
+            if (!this.isListening) this.listenButton.innerHTML = 'Sound ON';
             this.listenButton.disabled = false;
             this._lastListenDisabled = false;
         }, { once: true });
@@ -253,9 +253,6 @@ class RadioPlayer {
                 this.reloadAudio();
             }
         });
-        // Update playlist ▶/⏸ icon when local audio playback state changes
-        this.audioElement.addEventListener('play', () => this.updatePlayPauseButton());
-        this.audioElement.addEventListener('pause', () => this.updatePlayPauseButton());
         this.audioElement.load();
     }
 
@@ -401,20 +398,7 @@ class RadioPlayer {
     }
 
     handlePlayPauseToggle() {
-        if (this.audioElement.paused) {
-            this.audioElement.play().catch(e => console.error('Play error:', e));
-        } else {
-            this.audioElement.pause();
-        }
-        this.updatePlayPauseButton();
-    }
-
-    updatePlayPauseButton() {
-        if (this.audioElement.paused) {
-            this.playPauseButton.textContent = '▶';
-        } else {
-            this.playPauseButton.textContent = '⏸';
-        }
+        this.handlePlay();
     }
 
     handleVolumeChange(e) {
@@ -660,10 +644,10 @@ class RadioPlayer {
         if (this.isListening === this._lastListening) return;
         this._lastListening = this.isListening;
         if (this.isListening) {
-            this.listenButton.innerHTML = '&#9632; Stop';
+            this.listenButton.innerHTML = 'Sound OFF';
             this.listenButton.classList.add('listening');
         } else {
-            this.listenButton.innerHTML = this.audioReady ? '&#9654; Listen' : 'Loading&hellip;';
+            this.listenButton.innerHTML = this.audioReady ? 'Sound ON' : 'Loading&hellip;';
             this.listenButton.classList.remove('listening');
         }
     }
@@ -682,10 +666,12 @@ class RadioPlayer {
                 this.toggleButton.classList.remove('off');
                 this.toggleButton.classList.add('on');
                 this.toggleInner.textContent = 'ON';
+                this.playPauseButton.textContent = '⏸';
             } else {
                 this.toggleButton.classList.remove('on');
                 this.toggleButton.classList.add('off');
                 this.toggleInner.textContent = 'OFF';
+                this.playPauseButton.textContent = '▶';
             }
             this.refreshBroadcasterButtonLabel();
         }
