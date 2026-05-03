@@ -245,17 +245,17 @@ class RadioPlayer {
             }
         });
         // Handle song ending — fetch fresh state and reload if new song available
-        this.audioElement.addEventListener('ended', () => {
+        this.audioElement.addEventListener('ended', async () => {
             console.log('[AUDIO ENDED] Fetching fresh state');
-            this.fetchState().then(ok => {
-                if (ok && this.isListening && this.isPlaying) {
-                    console.log('[AUDIO ENDED] New state received, playing');
-                    this.audioElement.play().catch(e => {
-                        console.warn('[AUDIO ENDED] Play failed:', e);
-                    });
-                }
-            });
+            const ok = await this.fetchState();
+            if (ok && this.isListening && this.isPlaying) {
+                console.log('[AUDIO ENDED] New state received, reloading audio');
+                this.reloadAudio();
+            }
         });
+        // Update playlist ▶/⏸ icon when local audio playback state changes
+        this.audioElement.addEventListener('play', () => this.updatePlayPauseButton());
+        this.audioElement.addEventListener('pause', () => this.updatePlayPauseButton());
         this.audioElement.load();
     }
 
@@ -403,10 +403,17 @@ class RadioPlayer {
     handlePlayPauseToggle() {
         if (this.audioElement.paused) {
             this.audioElement.play().catch(e => console.error('Play error:', e));
-            this.playPauseButton.textContent = '⏸';
         } else {
             this.audioElement.pause();
+        }
+        this.updatePlayPauseButton();
+    }
+
+    updatePlayPauseButton() {
+        if (this.audioElement.paused) {
             this.playPauseButton.textContent = '▶';
+        } else {
+            this.playPauseButton.textContent = '⏸';
         }
     }
 
@@ -448,6 +455,7 @@ class RadioPlayer {
             this.loginLink.style.display = 'none';
             this.titleEl.contentEditable = 'true';
             this.titleEl.setAttribute('data-placeholder', 'Broadcast name…');
+            this.progressBar.disabled = false;
             this.refreshBroadcasterButtonLabel();
         } else {
             this.playButton.style.display = 'none';
@@ -458,6 +466,7 @@ class RadioPlayer {
             this.loginLink.style.display = 'inline-block';
             this.titleEl.contentEditable = 'false';
             this.titleEl.removeAttribute('data-placeholder');
+            this.progressBar.disabled = true;
             this.stopMonitor();
             this.updateNowPlaying();
         }
@@ -549,7 +558,13 @@ class RadioPlayer {
             }
             if (this.isListening) this.applyLocalAudio();
 
-            if (data.current_song) this.currentSong = data.current_song;
+            if (data.current_song && data.current_song !== this.currentSong) {
+                this.currentSong = data.current_song;
+                this._lastAutoAdvancedSong = null;
+                this.highlightActiveSong(data.current_song);
+            } else if (data.current_song) {
+                this.currentSong = data.current_song;
+            }
             if (data.broadcast_title !== undefined) this.updateBroadcastTitle(data.broadcast_title);
             this.clearError();
             this.setStatus('Online', 'online');
@@ -667,12 +682,10 @@ class RadioPlayer {
                 this.toggleButton.classList.remove('off');
                 this.toggleButton.classList.add('on');
                 this.toggleInner.textContent = 'ON';
-                this.playPauseButton.textContent = '⏸';
             } else {
                 this.toggleButton.classList.remove('on');
                 this.toggleButton.classList.add('off');
                 this.toggleInner.textContent = 'OFF';
-                this.playPauseButton.textContent = '▶';
             }
             this.refreshBroadcasterButtonLabel();
         }
@@ -811,11 +824,16 @@ class RadioPlayer {
                 this.handleIgnoreToggle(file.filename, !checkbox.checked);
             });
 
-            // Filename label (not clickable anymore - just for display)
+            // Filename label (clickable to switch to song)
             const label = document.createElement('span');
             label.className = 'file-label';
             label.textContent = file.filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
             label.title = file.filename;
+            label.style.cursor = 'pointer';
+            label.addEventListener('click', () => {
+                if (!this.isAuthenticated) return;
+                this.handleSongSwitch(file.filename);
+            });
 
             // Drag handle
             const dragHandle = document.createElement('span');

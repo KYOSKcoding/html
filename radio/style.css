@@ -757,6 +757,20 @@ body {
     border: none;
 }
 
+.progress-bar:disabled {
+    opacity: 1;
+    pointer-events: none;
+    cursor: default;
+}
+
+.progress-bar:disabled::-webkit-slider-thumb {
+    cursor: default;
+}
+
+.progress-bar:disabled::-moz-range-thumb {
+    cursor: default;
+}
+
 .time-info {
     display: flex;
     justify-content: space-between;
