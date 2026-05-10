@@ -1002,6 +1002,21 @@ def radio_songs():
     return jsonify(_get_files_with_metadata())
 
 
+@app.route("/api/radio/archive", methods=["GET"])
+@app.route("/kyosky/api/radio/archive", methods=["GET"])
+def radio_archive():
+    """List MP3 files in the radio/music/archive directory."""
+    archive_dir = os.path.join(RADIO_DIR, "archive")
+    try:
+        files = sorted(
+            f for f in os.listdir(archive_dir)
+            if f.lower().endswith(".mp3")
+        )
+    except FileNotFoundError:
+        files = []
+    return jsonify({"files": files})
+
+
 @app.route("/api/radio/files/ignore", methods=["POST"])
 @app.route("/kyosky/api/radio/files/ignore", methods=["POST"])
 def radio_files_ignore():

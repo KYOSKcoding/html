@@ -1372,19 +1372,21 @@ class ArchivePlayer {
     async scanArchive() {
         this.fileListEl.innerHTML = '<li class="archive-empty">Scanning…</li>';
         try {
-            const r = await fetch('./music/archive/');
-            if (!r.ok) throw new Error('directory listing unavailable');
-            const html = await r.text();
-            // Parse href links to .mp3 files from the directory index
-            const matches = [...html.matchAll(/href="([^"/][^"]*\.mp3)"/gi)];
-            this.files = matches
-                .map(m => decodeURIComponent(m[1]))
-                .filter((v, i, a) => a.indexOf(v) === i)  // deduplicate
-                .sort();
+            const url = this.getApiUrl('/api/radio/archive');
+            const r = await fetch(url);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const data = await r.json();
+            this.files = data.files || [];
             this.renderFileList();
         } catch (e) {
-            this.fileListEl.innerHTML = '<li class="archive-empty">Could not load archive. Enable directory listing on the server.</li>';
+            this.fileListEl.innerHTML = '<li class="archive-empty">Could not load archive.</li>';
+            console.error('Archive scan error:', e);
         }
+    }
+
+    getApiUrl(path) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        return isLocal ? `http://localhost:5001${path}` : `/kyosky${path}`;
     }
 
     renderFileList() {
@@ -1419,7 +1421,9 @@ class ArchivePlayer {
         const filename = typeof file === 'object' ? file.name : file;
         const label    = typeof file === 'object' ? (file.label || file.name) : file;
 
-        this.audio.src = './music/archive/' + encodeURIComponent(filename);
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const base = isLocal ? 'http://localhost:5001' : '';
+        this.audio.src = `${base}/radio/music/archive/${encodeURIComponent(filename)}`;
         this.audio.play().catch(e => console.warn('Archive play error:', e));
         this._playing = true;
         this.playPauseBtn.textContent = '⏸';
