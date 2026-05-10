@@ -1339,6 +1339,7 @@ class ArchivePlayer {
         this.prevBtn        = document.getElementById('archivePrevBtn');
         this.nextBtn        = document.getElementById('archiveNextBtn');
         this.volumeSlider   = document.getElementById('archiveVolume');
+        this.refreshBtn     = document.getElementById('archiveRefreshBtn');
 
         const savedVol = localStorage.getItem('archive_volume');
         if (savedVol !== null) {
@@ -1351,6 +1352,7 @@ class ArchivePlayer {
         this.prevBtn.addEventListener('click', () => this.loadTrack(this.trackIdx - 1));
         this.nextBtn.addEventListener('click', () => this.loadTrack(this.trackIdx + 1));
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.refreshBtn.addEventListener('click', () => this.scanArchive());
         this.volumeSlider.addEventListener('input', e => {
             this.audio.volume = e.target.value / 100;
             localStorage.setItem('archive_volume', e.target.value);
@@ -1364,18 +1366,24 @@ class ArchivePlayer {
             }
         });
 
-        this.loadManifest();
+        this.scanArchive();
     }
 
-    async loadManifest() {
+    async scanArchive() {
+        this.fileListEl.innerHTML = '<li class="archive-empty">Scanning…</li>';
         try {
-            const r = await fetch('./music/archive/manifest.json');
-            if (!r.ok) throw new Error('not found');
-            const data = await r.json();
-            this.files = data.files || [];
+            const r = await fetch('./music/archive/');
+            if (!r.ok) throw new Error('directory listing unavailable');
+            const html = await r.text();
+            // Parse href links to .mp3 files from the directory index
+            const matches = [...html.matchAll(/href="([^"/][^"]*\.mp3)"/gi)];
+            this.files = matches
+                .map(m => decodeURIComponent(m[1]))
+                .filter((v, i, a) => a.indexOf(v) === i)  // deduplicate
+                .sort();
             this.renderFileList();
         } catch (e) {
-            this.fileListEl.innerHTML = '<li class="archive-empty">No archive files available.</li>';
+            this.fileListEl.innerHTML = '<li class="archive-empty">Could not load archive. Enable directory listing on the server.</li>';
         }
     }
 
