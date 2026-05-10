@@ -268,6 +268,7 @@ class RadioPlayer {
         if (!this.isListening) {
             this.isListening = true;
             this.needsInitialSync = true;
+            if (window.archivePlayer) window.archivePlayer.stop();
             this.applyLocalAudio();
         } else {
             this.isListening = false;
@@ -1325,8 +1326,134 @@ class RadioPlayer {
     }
 }
 
+class ArchivePlayer {
+    constructor() {
+        this.audio = new Audio();
+        this.files = [];
+        this.trackIdx = -1;
+        this._playing = false;
+
+        this.nowPlayingEl   = document.getElementById('archiveNowPlaying');
+        this.fileListEl     = document.getElementById('archiveFileList');
+        this.playPauseBtn   = document.getElementById('archivePlayPauseBtn');
+        this.prevBtn        = document.getElementById('archivePrevBtn');
+        this.nextBtn        = document.getElementById('archiveNextBtn');
+        this.volumeSlider   = document.getElementById('archiveVolume');
+
+        const savedVol = localStorage.getItem('archive_volume');
+        if (savedVol !== null) {
+            this.volumeSlider.value = savedVol;
+            this.audio.volume = savedVol / 100;
+        } else {
+            this.audio.volume = 0.8;
+        }
+
+        this.prevBtn.addEventListener('click', () => this.loadTrack(this.trackIdx - 1));
+        this.nextBtn.addEventListener('click', () => this.loadTrack(this.trackIdx + 1));
+        this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.volumeSlider.addEventListener('input', e => {
+            this.audio.volume = e.target.value / 100;
+            localStorage.setItem('archive_volume', e.target.value);
+        });
+        this.audio.addEventListener('ended', () => {
+            if (this.trackIdx < this.files.length - 1) {
+                this.loadTrack(this.trackIdx + 1);
+            } else {
+                this._playing = false;
+                this.playPauseBtn.textContent = '▶';
+            }
+        });
+
+        this.loadManifest();
+    }
+
+    async loadManifest() {
+        try {
+            const r = await fetch('./music/archive/manifest.json');
+            if (!r.ok) throw new Error('not found');
+            const data = await r.json();
+            this.files = data.files || [];
+            this.renderFileList();
+        } catch (e) {
+            this.fileListEl.innerHTML = '<li class="archive-empty">No archive files available.</li>';
+        }
+    }
+
+    renderFileList() {
+        this.fileListEl.innerHTML = '';
+        if (this.files.length === 0) {
+            this.fileListEl.innerHTML = '<li class="archive-empty">No recordings in archive yet.</li>';
+            return;
+        }
+        this.files.forEach((file, idx) => {
+            const filename = typeof file === 'object' ? file.name : file;
+            const label    = typeof file === 'object' ? (file.label || file.name) : file;
+
+            const li = document.createElement('li');
+            li.className = 'file-item' + (idx === this.trackIdx ? ' active' : '');
+            li.dataset.idx = idx;
+
+            const span = document.createElement('span');
+            span.className = 'file-label';
+            span.textContent = label.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+            span.title = filename;
+
+            li.appendChild(span);
+            li.addEventListener('click', () => this.loadTrack(idx));
+            this.fileListEl.appendChild(li);
+        });
+    }
+
+    loadTrack(idx) {
+        if (idx < 0 || idx >= this.files.length) return;
+        this.trackIdx = idx;
+        const file     = this.files[idx];
+        const filename = typeof file === 'object' ? file.name : file;
+        const label    = typeof file === 'object' ? (file.label || file.name) : file;
+
+        this.audio.src = './music/archive/' + encodeURIComponent(filename);
+        this.audio.play().catch(e => console.warn('Archive play error:', e));
+        this._playing = true;
+        this.playPauseBtn.textContent = '⏸';
+        this.playPauseBtn.disabled = false;
+        this.nowPlayingEl.textContent = label.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+
+        for (const li of this.fileListEl.querySelectorAll('.file-item')) {
+            li.classList.toggle('active', parseInt(li.dataset.idx) === idx);
+        }
+        this.prevBtn.disabled = idx === 0;
+        this.nextBtn.disabled = idx === this.files.length - 1;
+
+        // Pause broadcast if it was playing
+        if (window.radioPlayer && window.radioPlayer.isListening) {
+            window.radioPlayer.handleListen();
+        }
+    }
+
+    togglePlayPause() {
+        if (this.trackIdx < 0) return;
+        if (this._playing) {
+            this.audio.pause();
+            this._playing = false;
+            this.playPauseBtn.textContent = '▶';
+        } else {
+            this.audio.play().catch(() => {});
+            this._playing = true;
+            this.playPauseBtn.textContent = '⏸';
+        }
+    }
+
+    stop() {
+        if (!this._playing) return;
+        this.audio.pause();
+        this._playing = false;
+        this.playPauseBtn.textContent = '▶';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     window.radioPlayer = new RadioPlayer();
+    window.archivePlayer = new ArchivePlayer();
 });
 
 // Clean up SSE connection on page unload

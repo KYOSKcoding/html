@@ -95,7 +95,35 @@
     </div>
 
     <audio id="monitorAudio" style="display:none;"></audio>
-    <script src="radio.js?v=16"></script>
+
+    <!-- Archive player box -->
+    <div class="radio-container archive-container">
+        <div class="radio-header">
+            <h1>Archive</h1>
+            <p class="radio-track" id="archiveNowPlaying">— select a track —</p>
+        </div>
+
+        <div class="song-header" style="margin-bottom:10px;">
+            <span class="song-label">Now Playing</span>
+            <div class="playlist-controls">
+                <button class="nav-btn" id="archivePrevBtn" title="Previous" disabled>⏮</button>
+                <button class="play-pause-btn" id="archivePlayPauseBtn" disabled>▶</button>
+                <button class="nav-btn" id="archiveNextBtn" title="Next" disabled>⏭</button>
+                <input type="range" class="volume-slider" id="archiveVolume" min="0" max="100" value="80" title="Volume">
+            </div>
+        </div>
+
+        <div class="song-section" style="margin-top:0;">
+            <div class="song-header" style="margin-bottom:8px;">
+                <span class="song-label">Recordings</span>
+            </div>
+            <ul class="file-list" id="archiveFileList">
+                <li class="archive-empty">Loading…</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="radio.js?v=17"></script>
 </body>
 
 </html>

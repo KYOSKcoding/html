@@ -10,9 +10,11 @@ body {
     color: #00ff00;
     min-height: 100vh;
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
-    align-items: center;
-    padding: 20px;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 40px 20px;
 }
 
 .radio-container {
@@ -835,6 +837,17 @@ body {
 
 #duration {
     text-align: right;
+}
+
+.archive-container {
+    align-self: flex-start;
+}
+
+.archive-empty {
+    padding: 12px;
+    color: #003300;
+    font-size: 0.82em;
+    cursor: default;
 }
 
 /* Responsive design */
