@@ -1340,6 +1340,10 @@ class ArchivePlayer {
         this.nextBtn        = document.getElementById('archiveNextBtn');
         this.volumeSlider   = document.getElementById('archiveVolume');
         this.refreshBtn     = document.getElementById('archiveRefreshBtn');
+        this.progressBar    = document.getElementById('archiveProgressBar');
+        this.currentTimeEl  = document.getElementById('archiveCurrentTime');
+        this.durationEl     = document.getElementById('archiveDuration');
+        this._seeking       = false;
 
         const savedVol = localStorage.getItem('archive_volume');
         if (savedVol !== null) {
@@ -1353,9 +1357,22 @@ class ArchivePlayer {
         this.nextBtn.addEventListener('click', () => this.loadTrack(this.trackIdx + 1));
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.refreshBtn.addEventListener('click', () => this.scanArchive());
+        this.progressBar.addEventListener('mousedown',  () => { this._seeking = true; });
+        this.progressBar.addEventListener('touchstart', () => { this._seeking = true; });
+        this.progressBar.addEventListener('mouseup',  e => this.handleSeek());
+        this.progressBar.addEventListener('touchend', e => this.handleSeek());
+        this.progressBar.addEventListener('input',    () => this.handleSeek());
         this.volumeSlider.addEventListener('input', e => {
             this.audio.volume = e.target.value / 100;
             localStorage.setItem('archive_volume', e.target.value);
+        });
+        this.audio.addEventListener('timeupdate', () => {
+            if (!this._seeking) this.updateProgressBar();
+        });
+        this.audio.addEventListener('loadedmetadata', () => {
+            this.progressBar.disabled = false;
+            this.durationEl.textContent = this.formatTime(this.audio.duration);
+            this.updateProgressBar();
         });
         this.audio.addEventListener('ended', () => {
             if (this.trackIdx < this.files.length - 1) {
@@ -1423,6 +1440,10 @@ class ArchivePlayer {
 
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const base = isLocal ? 'http://localhost:5001' : '';
+        this.progressBar.value = 0;
+        this.progressBar.disabled = true;
+        this.currentTimeEl.textContent = '0:00';
+        this.durationEl.textContent = '0:00';
         this.audio.src = `${base}/radio/music/archive/${encodeURIComponent(filename)}`;
         this.audio.play().catch(e => console.warn('Archive play error:', e));
         this._playing = true;
@@ -1453,6 +1474,26 @@ class ArchivePlayer {
             this._playing = true;
             this.playPauseBtn.textContent = '⏸';
         }
+    }
+
+    updateProgressBar() {
+        if (!this.audio.duration) return;
+        const pct = (this.audio.currentTime / this.audio.duration) * 100;
+        this.progressBar.value = Math.max(0, Math.min(100, pct));
+        this.currentTimeEl.textContent = this.formatTime(this.audio.currentTime);
+        this.durationEl.textContent    = this.formatTime(this.audio.duration);
+    }
+
+    handleSeek() {
+        if (!this.audio.duration) return;
+        this.audio.currentTime = (this.progressBar.value / 100) * this.audio.duration;
+        this._seeking = false;
+        this.updateProgressBar();
+    }
+
+    formatTime(secs) {
+        const s = Math.max(0, secs || 0);
+        return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
     }
 
     stop() {
