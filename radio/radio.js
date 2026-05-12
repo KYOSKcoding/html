@@ -1412,13 +1412,15 @@ class ArchivePlayer {
             this.fileListEl.innerHTML = '<li class="archive-empty">No recordings in archive yet.</li>';
             return;
         }
-        this.files.forEach((file, idx) => {
+        const sortedFiles = [...this.files].reverse();
+        sortedFiles.forEach((file, displayIdx) => {
+            const actualIdx = this.files.length - 1 - displayIdx;
             const filename = typeof file === 'object' ? file.name : file;
             const label    = typeof file === 'object' ? (file.label || file.name) : file;
 
             const li = document.createElement('li');
-            li.className = 'file-item' + (idx === this.trackIdx ? ' active' : '');
-            li.dataset.idx = idx;
+            li.className = 'file-item' + (actualIdx === this.trackIdx ? ' active' : '');
+            li.dataset.idx = actualIdx;
 
             const span = document.createElement('span');
             span.className = 'file-label';
@@ -1426,7 +1428,7 @@ class ArchivePlayer {
             span.title = filename;
 
             li.appendChild(span);
-            li.addEventListener('click', () => this.loadTrack(idx));
+            li.addEventListener('click', () => this.loadTrack(actualIdx));
             this.fileListEl.appendChild(li);
         });
     }
