@@ -16,6 +16,27 @@ body {
     gap: 24px;
 }
 
+.back-link {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.2em;
+    width: 100%;
+}
+
+.back-link a {
+    color: #00ff00;
+    text-decoration: none;
+    border: 2px solid #00ff00;
+    padding: 10px 20px;
+    display: inline-block;
+}
+
+.back-link a:hover {
+    background-color: #00ff00;
+    color: black;
+}
+
 .radio-container {
     background: rgba(0, 0, 0, 0.8);
     border: 2px solid #00ff00;
