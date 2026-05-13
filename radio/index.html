@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Radio - kyo.sk</title>
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 
 <body>
@@ -30,12 +30,6 @@
 
             <!-- Play/Stop button (broadcaster only, controls server broadcast) -->
             <button id="playButton" class="play-button" style="display: none;">&#9654; Broadcast</button>
-
-            <!-- Go Live button (broadcaster only, switches all listeners to mic stream) -->
-            <button id="liveButton" class="live-button" style="display: none;">&#9679; Go Live</button>
-
-            <!-- Monitor button (broadcaster only, private preview of live HLS) -->
-            <button id="monitorButton" class="monitor-button" style="display: none;">&#128266; Monitor</button>
 
             <!-- Logout button (broadcaster only) -->
             <button id="logoutButton" class="logout-button" style="display: none;">Logout</button>
@@ -98,8 +92,6 @@
         </div>
     </div>
 
-    <audio id="monitorAudio" style="display:none;"></audio>
-
     <!-- Archive player box -->
     <div class="radio-container archive-container">
         <div class="radio-header">
@@ -138,7 +130,7 @@
         </div>
     </div>
 
-    <script src="radio.js?v=18"></script>
+    <script src="radio.js?v=19"></script>
 </body>
 
 </html>
