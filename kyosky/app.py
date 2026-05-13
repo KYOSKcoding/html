@@ -134,8 +134,19 @@ def _get_files_with_metadata() -> dict:
     return {"files": files}
 
 
-_DEFAULT_SONG = "Jingle_Macker.mp3"
-_default_duration = _get_mp3_duration(os.path.join(RADIO_DIR, _DEFAULT_SONG))
+def _get_default_song() -> tuple:
+    """Find first existing MP3 file in music directory. Returns (filename, duration)."""
+    try:
+        for filename in sorted(os.listdir(RADIO_DIR)):
+            if filename.lower().endswith(".mp3"):
+                duration = _get_mp3_duration(os.path.join(RADIO_DIR, filename))
+                return (filename, duration)
+    except Exception as e:
+        logger.error(f"Error finding default song: {e}")
+    return ("", 0.0)
+
+
+_DEFAULT_SONG, _default_duration = _get_default_song()
 
 # Radio player state management — broadcast defaults to ON
 RADIO_STATE = {
@@ -847,14 +858,11 @@ def _ensure_relay_encoder() -> bool:
     if proc is not None and proc.poll() is None:
         return True
 
-    with RADIO_STATE_LOCK:
-        title = RADIO_STATE["broadcast_title"]
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in title).strip("_")[
-        :40
-    ]
-    ts_stamp = time.strftime("%Y%m%d_%H%M%S")
-    fname = f"live_{safe}_{ts_stamp}.mp3" if safe else f"live_{ts_stamp}.mp3"
-    archive_path = os.path.join(RADIO_DIR, fname)
+    ts_stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    fname = f"{ts_stamp}_LIVE.mp3"
+    invisible_archive_dir = os.path.join(RADIO_DIR, "archive", "invisible")
+    os.makedirs(invisible_archive_dir, exist_ok=True)
+    archive_path = os.path.join(invisible_archive_dir, fname)
 
     os.makedirs(HLS_LIVE_DIR, exist_ok=True)
     for f in os.listdir(HLS_LIVE_DIR):
@@ -1005,11 +1013,40 @@ def radio_songs():
 @app.route("/api/radio/archive", methods=["GET"])
 @app.route("/kyosky/api/radio/archive", methods=["GET"])
 def radio_archive():
-    """List MP3 files in the radio/music/archive directory."""
+    """List public MP3 files in the radio/music/archive directory (excluding invisible)."""
     archive_dir = os.path.join(RADIO_DIR, "archive")
     try:
         files = sorted(
             f for f in os.listdir(archive_dir)
+            if f.lower().endswith(".mp3") and not os.path.isdir(os.path.join(archive_dir, f))
+        )
+    except FileNotFoundError:
+        files = []
+    return jsonify({"files": files})
+
+
+@app.route("/radio/music/archive/invisible/<path:filename>")
+def serve_invisible_archive(filename):
+    """Serve invisible archive MP3 for playback in browser. Requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"error": "unauthorized"}), 401
+    invisible_dir = os.path.join(RADIO_DIR, "archive", "invisible")
+    return send_from_directory(invisible_dir, filename)
+
+
+@app.route("/api/radio/archive/invisible", methods=["GET"])
+@app.route("/kyosky/api/radio/archive/invisible", methods=["GET"])
+def radio_archive_invisible():
+    """List invisible (pending review) recordings. Requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    invisible_dir = os.path.join(RADIO_DIR, "archive", "invisible")
+    try:
+        files = sorted(
+            f for f in os.listdir(invisible_dir)
             if f.lower().endswith(".mp3")
         )
     except FileNotFoundError:
@@ -1088,6 +1125,87 @@ def radio_files_refresh():
     # Trigger a rescan (files will be picked up on next radio_songs() call)
     logger.info("File list refresh requested")
     return jsonify({"success": True, "files": _get_files_with_metadata()})
+
+
+@app.route("/api/radio/files/delete", methods=["POST"])
+@app.route("/kyosky/api/radio/files/delete", methods=["POST"])
+def radio_files_delete():
+    """Delete a file from music or archive — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    filename = data.get("filename", "")
+    source = data.get("source", "music")  # "music", "archive", or "invisible"
+
+    if not filename or os.path.basename(filename) != filename or not filename.lower().endswith(".mp3"):
+        return jsonify({"success": False, "error": "invalid_filename"}), 400
+
+    if source == "music":
+        file_path = os.path.join(RADIO_DIR, filename)
+    elif source == "archive":
+        file_path = os.path.join(RADIO_DIR, "archive", filename)
+    elif source == "invisible":
+        file_path = os.path.join(RADIO_DIR, "archive", "invisible", filename)
+    else:
+        return jsonify({"success": False, "error": "invalid_source"}), 400
+
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"Deleted file: {source}/{filename}")
+            return jsonify({"success": True})
+        return jsonify({"success": False, "error": "file_not_found"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting file: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/radio/files/move", methods=["POST"])
+@app.route("/kyosky/api/radio/files/move", methods=["POST"])
+def radio_files_move():
+    """Move file between music, archive, and invisible — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    filename = data.get("filename", "")
+    source = data.get("source", "")  # "music", "archive", "invisible"
+    dest = data.get("dest", "")      # "music", "archive", "invisible"
+
+    if not filename or os.path.basename(filename) != filename or not filename.lower().endswith(".mp3"):
+        return jsonify({"success": False, "error": "invalid_filename"}), 400
+
+    if source not in ("music", "archive", "invisible") or dest not in ("music", "archive", "invisible"):
+        return jsonify({"success": False, "error": "invalid_source_or_dest"}), 400
+
+    # Map sources/dests to paths
+    paths = {
+        "music": os.path.join(RADIO_DIR, filename),
+        "archive": os.path.join(RADIO_DIR, "archive", filename),
+        "invisible": os.path.join(RADIO_DIR, "archive", "invisible", filename),
+    }
+
+    src_path = paths[source]
+    dest_path = paths[dest]
+
+    try:
+        if not os.path.exists(src_path):
+            return jsonify({"success": False, "error": "file_not_found"}), 404
+
+        # Ensure dest directory exists
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+        # Move file
+        import shutil
+        shutil.move(src_path, dest_path)
+        logger.info(f"Moved file: {source}/{filename} → {dest}/{filename}")
+        return jsonify({"success": True, "source": source, "dest": dest})
+    except Exception as e:
+        logger.error(f"Error moving file: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/radio/song", methods=["POST"])

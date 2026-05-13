@@ -78,6 +78,7 @@ class RadioPlayer {
         this._lastStatusClass = null;
         this._lastStatusText = null;
         this._lastAuthVisible = null;
+        this._lastLiveMode = null;
 
         // Broadcast title
         this._lastBroadcastTitle = null;
@@ -693,15 +694,21 @@ class RadioPlayer {
             if (this.isAuthenticated) this.playButton.disabled = false;
         }
 
-        if (this.isPlaying !== this._lastIsPlaying) {
+        if (this.isPlaying !== this._lastIsPlaying || this.liveMode !== this._lastLiveMode) {
             this._lastIsPlaying = this.isPlaying;
-            if (this.isPlaying) {
+            this._lastLiveMode = this.liveMode;
+            if (this.liveMode) {
                 this.toggleButton.classList.remove('off');
+                this.toggleButton.classList.add('on', 'live');
+                this.toggleInner.textContent = 'LIVE';
+                this.playPauseButton.textContent = '⏸';
+            } else if (this.isPlaying) {
+                this.toggleButton.classList.remove('off', 'live');
                 this.toggleButton.classList.add('on');
                 this.toggleInner.textContent = 'ON';
                 this.playPauseButton.textContent = '⏸';
             } else {
-                this.toggleButton.classList.remove('on');
+                this.toggleButton.classList.remove('on', 'live');
                 this.toggleButton.classList.add('off');
                 this.toggleInner.textContent = 'OFF';
                 this.playPauseButton.textContent = '▶';
@@ -1316,18 +1323,58 @@ class ArchivePlayer {
             const label    = typeof file === 'object' ? (file.label || file.name) : file;
 
             const li = document.createElement('li');
-            li.className = 'file-item' + (actualIdx === this.trackIdx ? ' active' : '');
+            li.className = 'file-item file-controls' + (actualIdx === this.trackIdx ? ' active' : '');
             li.dataset.idx = actualIdx;
 
             const span = document.createElement('span');
             span.className = 'file-label';
             span.textContent = label.replace(/\.mp3$/i, '').replace(/_/g, ' ');
             span.title = filename;
-
+            span.addEventListener('click', () => this.loadTrack(actualIdx));
             li.appendChild(span);
-            li.addEventListener('click', () => this.loadTrack(actualIdx));
+
+            if (window.radioPlayer && window.radioPlayer.isAuthenticated) {
+                const buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'file-action-buttons';
+
+                const hideBtn = document.createElement('button');
+                hideBtn.className = 'file-action-btn hide-btn';
+                hideBtn.title = 'Move to Invisible Archive';
+                hideBtn.innerHTML = '→';
+                hideBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.makeInvisible(filename);
+                });
+                buttonsDiv.appendChild(hideBtn);
+
+                li.appendChild(buttonsDiv);
+            }
+
             this.fileListEl.appendChild(li);
         });
+    }
+
+    async deleteFile(filename) {
+        if (!confirm(`Delete "${filename}"?`)) return;
+        try {
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const baseUrl = isLocal ? 'http://localhost:5001' : '/kyosky';
+            const response = await fetch(`${baseUrl}/api/radio/files/delete`, {
+                method: 'POST',
+                headers: {
+                    'X-Broadcaster-Token': window.radioPlayer.broadcasterToken || '',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename, source: 'archive' })
+            });
+            if (response.ok) {
+                this.loadFiles();
+            } else {
+                alert('Failed to delete');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
     }
 
     loadTrack(idx) {
@@ -1403,9 +1450,284 @@ class ArchivePlayer {
     }
 }
 
+class InvisibleArchiveManager {
+    constructor() {
+        this.container = document.getElementById('invisibleArchiveContainer');
+        this.fileList = document.getElementById('invisibleFileList');
+        this.refreshBtn = document.getElementById('invisibleRefreshBtn');
+        this.audio = new Audio();
+        this.audio.preload = 'none';
+        this.files = [];
+        this.trackIdx = -1;
+        this._playing = false;
+        this._seeking = false;
+
+        // UI elements
+        this.nowPlayingEl = document.getElementById('invisibleNowPlaying');
+        this.playPauseBtn = document.getElementById('invisiblePlayPauseBtn');
+        this.prevBtn = document.getElementById('invisiblePrevBtn');
+        this.nextBtn = document.getElementById('invisibleNextBtn');
+        this.progressBar = document.getElementById('invisibleProgressBar');
+        this.currentTimeEl = document.getElementById('invisibleCurrentTime');
+        this.durationEl = document.getElementById('invisibleDuration');
+        this.volumeSlider = document.getElementById('invisibleVolume');
+
+        this.refreshBtn.addEventListener('click', () => this.loadFiles());
+        this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+        this.prevBtn.addEventListener('click', () => this.prevTrack());
+        this.nextBtn.addEventListener('click', () => this.nextTrack());
+        this.volumeSlider.addEventListener('input', (e) => { this.audio.volume = e.target.value / 100; });
+        this.progressBar.addEventListener('mousedown', () => { this._seeking = true; });
+        this.progressBar.addEventListener('mouseup', () => this.handleSeek());
+        this.progressBar.addEventListener('input', () => this.handleSeek());
+
+        this.audio.addEventListener('timeupdate', () => this.updateProgressBar());
+        this.audio.addEventListener('loadedmetadata', () => {
+            this.progressBar.disabled = false;
+            this.durationEl.textContent = this.formatTime(this.audio.duration);
+        });
+
+        // Defer init to ensure radioPlayer is ready
+        setTimeout(() => this.init(), 100);
+
+        // Re-check auth status when SSE updates come in
+        setInterval(() => {
+            if (window.radioPlayer) {
+                const shouldShow = window.radioPlayer.isAuthenticated;
+                if (shouldShow && this.container.style.display === 'none') {
+                    this.container.style.display = 'block';
+                    this.loadFiles();
+                }
+            }
+        }, 500);
+    }
+
+    getApiUrl(path) {
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        return isLocal ? `http://localhost:5001${path}` : `/kyosky${path}`;
+    }
+
+    init() {
+        if (!window.radioPlayer) {
+            setTimeout(() => this.init(), 200);
+            return;
+        }
+
+        if (!window.radioPlayer.isAuthenticated) {
+            this.container.style.display = 'none';
+            return;
+        }
+
+        this.container.style.display = 'block';
+        this.loadFiles();
+    }
+
+    async loadFiles() {
+        try {
+            const token = (window.radioPlayer && window.radioPlayer.broadcasterToken) || '';
+            const headers = { 'X-Broadcaster-Token': token };
+
+            const response = await fetch(this.getApiUrl('/api/radio/archive/invisible'), {
+                headers: headers
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    this.fileList.innerHTML = '<li class="archive-empty">Not authenticated. Log in first.</li>';
+                } else {
+                    this.fileList.innerHTML = '<li class="archive-empty">No pending recordings.</li>';
+                }
+                return;
+            }
+            const data = await response.json();
+            this.files = data.files || [];
+            this.renderFileList();
+        } catch (e) {
+            this.fileList.innerHTML = '<li class="archive-empty">Could not load invisible archive.</li>';
+            console.error('Invisible archive error:', e);
+        }
+    }
+
+    renderFileList() {
+        this.fileList.innerHTML = '';
+        if (this.files.length === 0) {
+            this.fileList.innerHTML = '<li class="archive-empty">No pending recordings.</li>';
+            return;
+        }
+        const sortedFiles = [...this.files].reverse();
+        sortedFiles.forEach((filename, displayIdx) => {
+            const actualIdx = this.files.length - 1 - displayIdx;
+            const li = document.createElement('li');
+            li.className = 'file-item file-controls' + (actualIdx === this.trackIdx ? ' active' : '');
+            li.dataset.idx = actualIdx;
+
+            const span = document.createElement('span');
+            span.className = 'file-label';
+            span.textContent = filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+            span.title = filename;
+            span.addEventListener('click', () => this.loadTrack(actualIdx));
+            li.appendChild(span);
+
+            const buttonsDiv = document.createElement('div');
+            buttonsDiv.className = 'file-action-buttons';
+
+            const visibleBtn = document.createElement('button');
+            visibleBtn.className = 'file-action-btn approve-btn';
+            visibleBtn.title = 'Make Visible (Move to Public Archive)';
+            visibleBtn.innerHTML = '← Visible';
+            visibleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.moveToPublicArchive(filename);
+            });
+            buttonsDiv.appendChild(visibleBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'file-action-btn delete-btn';
+            deleteBtn.title = 'Delete';
+            deleteBtn.innerHTML = '✕ Delete';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteFile(filename);
+            });
+            buttonsDiv.appendChild(deleteBtn);
+
+            li.appendChild(buttonsDiv);
+            this.fileList.appendChild(li);
+        });
+    }
+
+    async moveToPublicArchive(filename) {
+        try {
+            const token = (window.radioPlayer && window.radioPlayer.broadcasterToken) || '';
+            const response = await fetch(this.getApiUrl('/api/radio/files/move'), {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, source: 'invisible', dest: 'archive' })
+            });
+            if (response.ok) {
+                this.loadFiles();
+                if (window.archivePlayer) window.archivePlayer.scanArchive();
+            } else {
+                alert('Failed to approve');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
+    async deleteFile(filename) {
+        if (!confirm(`Delete "${filename}"?`)) return;
+        try {
+            const token = (window.radioPlayer && window.radioPlayer.broadcasterToken) || '';
+            const response = await fetch(this.getApiUrl('/api/radio/files/delete'), {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, source: 'invisible' })
+            });
+            if (response.ok) {
+                this.loadFiles();
+            } else {
+                alert('Failed to delete');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
+    loadTrack(idx) {
+        if (idx < 0 || idx >= this.files.length) return;
+        this.trackIdx = idx;
+        const filename = this.files[idx];
+        const label = filename.replace(/\.mp3$/i, '').replace(/_/g, ' ');
+
+        this.progressBar.value = 0;
+        this.progressBar.disabled = true;
+        this.currentTimeEl.textContent = '0:00';
+        this.durationEl.textContent = '0:00';
+        this.audio.src = `/radio/music/archive/invisible/${encodeURIComponent(filename)}`;
+        this.audio.play().catch(e => console.warn('Play error:', e));
+        this._playing = true;
+        this.playPauseBtn.textContent = '⏸';
+        this.playPauseBtn.disabled = false;
+        this.nowPlayingEl.textContent = label;
+
+        for (const li of this.fileList.querySelectorAll('.file-item')) {
+            li.classList.toggle('active', parseInt(li.dataset.idx) === idx);
+        }
+        this.prevBtn.disabled = idx === 0;
+        this.nextBtn.disabled = idx === this.files.length - 1;
+
+        if (window.radioPlayer && window.radioPlayer.isListening) {
+            window.radioPlayer.handleListen();
+        }
+    }
+
+    togglePlayPause() {
+        if (this.trackIdx < 0) return;
+        if (this._playing) {
+            this.audio.pause();
+            this._playing = false;
+            this.playPauseBtn.textContent = '▶';
+        } else {
+            this.audio.play().catch(() => {});
+            this._playing = true;
+            this.playPauseBtn.textContent = '⏸';
+        }
+    }
+
+    prevTrack() {
+        if (this.trackIdx > 0) this.loadTrack(this.trackIdx - 1);
+    }
+
+    nextTrack() {
+        if (this.trackIdx < this.files.length - 1) this.loadTrack(this.trackIdx + 1);
+    }
+
+    updateProgressBar() {
+        if (!this._seeking && this.audio.duration) {
+            const pct = (this.audio.currentTime / this.audio.duration) * 100;
+            this.progressBar.value = Math.max(0, Math.min(100, pct));
+            this.currentTimeEl.textContent = this.formatTime(this.audio.currentTime);
+        }
+    }
+
+    handleSeek() {
+        if (!this.audio.duration) return;
+        this.audio.currentTime = (this.progressBar.value / 100) * this.audio.duration;
+        this._seeking = false;
+    }
+
+    formatTime(secs) {
+        const s = Math.max(0, secs || 0);
+        return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    }
+
+    async makeInvisible(filename) {
+        const token = window.radioPlayer?.broadcasterToken || '';
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const baseUrl = isLocal ? 'http://localhost:5001' : '/kyosky';
+        try {
+            const r = await fetch(`${baseUrl}/api/radio/files/move`, {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, source: 'archive', dest: 'invisible' })
+            });
+            if (r.ok) {
+                this.scanArchive();
+                window.invisibleArchiveManager?.loadFiles();
+            } else {
+                alert('Failed to move to invisible');
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     window.radioPlayer = new RadioPlayer();
     window.archivePlayer = new ArchivePlayer();
+    window.invisibleArchiveManager = new InvisibleArchiveManager();
 });
 
 // Clean up SSE connection on page unload

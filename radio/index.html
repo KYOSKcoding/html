@@ -130,7 +130,44 @@
         </div>
     </div>
 
-    <script src="radio.js?v=19"></script>
+    <!-- Invisible Archive (pending review) -->
+    <div id="invisibleArchiveContainer" class="radio-container archive-container" style="display: none;">
+        <div class="radio-header">
+            <h1>📋 Invisible Archive</h1>
+            <p class="radio-track" style="font-size: 0.8em; color: #888;">Pending review & approval</p>
+        </div>
+
+        <div class="song-header" style="margin-bottom:10px;">
+            <span id="invisibleNowPlaying" class="radio-track">— select a track —</span>
+            <div class="playlist-controls">
+                <button class="nav-btn" id="invisiblePrevBtn" disabled>⏮</button>
+                <button class="play-pause-btn" id="invisiblePlayPauseBtn" disabled>▶</button>
+                <button class="nav-btn" id="invisibleNextBtn" disabled>⏭</button>
+                <input type="range" class="volume-slider" id="invisibleVolume" min="0" max="100" value="80">
+            </div>
+        </div>
+
+        <div class="progress-container">
+            <input type="range" id="invisibleProgressBar" class="progress-bar" min="0" max="100" value="0" disabled />
+            <div class="time-info">
+                <span id="invisibleCurrentTime" class="time">0:00</span>
+                <span class="time-separator">/</span>
+                <span id="invisibleDuration" class="time">0:00</span>
+            </div>
+        </div>
+
+        <div class="song-section" style="margin-top:0;">
+            <div class="song-header" style="margin-bottom:8px;">
+                <span class="song-label">Live Recordings (Pending)</span>
+                <button class="play-pause-btn" id="invisibleRefreshBtn" title="Refresh">↻</button>
+            </div>
+            <ul class="file-list" id="invisibleFileList">
+                <li class="archive-empty">Loading…</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="radio.js?v=21"></script>
 </body>
 
 </html>

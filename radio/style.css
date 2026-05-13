@@ -664,6 +664,17 @@ body {
     opacity: 0.55;
 }
 
+.toggle-switch.live {
+    border-color: #ff4444;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 68, 68, 0.5), rgba(0, 0, 0, 0.9));
+    box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
+}
+
+.toggle-switch.live .switch-inner {
+    text-shadow: 0 0 10px #ff4444, 0 0 20px #ff0000;
+    color: #ff4444;
+}
+
 .switch-inner {
     position: relative;
     z-index: 1;
@@ -897,4 +908,63 @@ body {
         flex-direction: column;
         gap: 10px;
     }
+}
+
+.file-item.file-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.file-action-buttons {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.file-action-btn {
+    padding: 4px 10px;
+    border: 1px solid #00aa00;
+    background: rgba(0, 170, 0, 0.1);
+    color: #00aa00;
+    font-family: 'Courier New', monospace;
+    font-size: 0.75em;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.file-action-btn:hover {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.15);
+    color: #00ff00;
+}
+
+.file-action-btn:active {
+    transform: scale(0.95);
+}
+
+.file-action-btn.delete-btn {
+    border-color: #ff6600;
+    background: rgba(255, 102, 0, 0.1);
+    color: #ff6600;
+}
+
+.file-action-btn.delete-btn:hover {
+    border-color: #ff8800;
+    background: rgba(255, 136, 0, 0.2);
+    color: #ff8800;
+}
+
+.file-action-btn.approve-btn {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.1);
+    color: #00ff00;
+}
+
+.file-action-btn.approve-btn:hover {
+    border-color: #00ff00;
+    background: rgba(0, 255, 0, 0.2);
+    color: #00ff00;
 }

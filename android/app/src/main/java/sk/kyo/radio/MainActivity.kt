@@ -1,6 +1,7 @@
 package sk.kyo.radio
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -9,15 +10,20 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.audio.CustomAudioEffect
 import com.pedro.library.rtmp.RtmpOnlyAudio
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : AppCompatActivity(), ConnectChecker {
 
@@ -25,10 +31,12 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private lateinit var statusCircle: FrameLayout
     private lateinit var btnStart: MaterialButton
     private lateinit var btnStop: MaterialButton
+    private lateinit var btnSettings: MaterialButton
     private lateinit var seekVolume: SeekBar
 
     private var stream: RtmpOnlyAudio? = null
     private var serviceConn: ServiceConnection? = null
+    private var broadcasterToken: String? = null
 
     // Slider 0–100 → gain 0–16x (50 = 8x default)
     private var gainMultiplier = 8.0f
@@ -82,6 +90,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
         statusCircle = findViewById(R.id.statusCircle)
         btnStart    = findViewById(R.id.btnStart)
         btnStop     = findViewById(R.id.btnStop)
+        btnSettings = findViewById(R.id.btnSettings)
         seekVolume  = findViewById(R.id.seekVolume)
 
         seekVolume.progress = 50
@@ -89,6 +98,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
         btnStart.setOnClickListener { checkPermissionAndStart() }
         btnStop.setOnClickListener  { stopStream() }
+        btnSettings.setOnClickListener { showSettingsDialog() }
 
         seekVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
@@ -98,6 +108,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
 
+        checkAndShowSetupDialog()
         setState(State.OFFLINE)
     }
 
@@ -171,20 +182,50 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private fun startStream() {
         setState(State.CONNECTING)
 
-        val svcIntent = Intent(this, BroadcastService::class.java)
-        ContextCompat.startForegroundService(this, svcIntent)
-        val conn = object : ServiceConnection {
-            override fun onServiceConnected(n: ComponentName?, b: IBinder?) {}
-            override fun onServiceDisconnected(n: ComponentName?) {}
-        }
-        serviceConn = conn
-        bindService(svcIntent, conn, Context.BIND_AUTO_CREATE)
+        // Auth + streaming on background thread
+        Thread {
+            val prefs     = getSharedPreferences("kyo_radio", MODE_PRIVATE)
+            val serverUrl = prefs.getString("server_url", "https://kyo.sk/kyosky") ?: run {
+                setState(State.ERROR, "no url")
+                stopService(Intent(this, BroadcastService::class.java))
+                return@Thread
+            }
+            val password  = prefs.getString("broadcaster_password", "") ?: run {
+                setState(State.ERROR, "no pwd")
+                stopService(Intent(this, BroadcastService::class.java))
+                return@Thread
+            }
 
-        val s = RtmpOnlyAudio(this)
-        s.setCustomAudioEffect(gainEffect)
-        s.prepareAudio(128_000, 44100, false)
-        s.startStream(rtmpUrl)
-        stream = s
+            if (!authenticate(serverUrl, password)) {
+                setState(State.ERROR, "auth")
+                stopService(Intent(this, BroadcastService::class.java))
+                return@Thread
+            }
+
+            if (!notifyLiveStart(serverUrl)) {
+                setState(State.ERROR, "live")
+                stopService(Intent(this, BroadcastService::class.java))
+                return@Thread
+            }
+
+            // Auth passed — start streaming on UI thread
+            runOnUiThread {
+                val svcIntent = Intent(this, BroadcastService::class.java)
+                ContextCompat.startForegroundService(this, svcIntent)
+                val conn = object : ServiceConnection {
+                    override fun onServiceConnected(n: ComponentName?, b: IBinder?) {}
+                    override fun onServiceDisconnected(n: ComponentName?) {}
+                }
+                serviceConn = conn
+                bindService(svcIntent, conn, Context.BIND_AUTO_CREATE)
+
+                val s = RtmpOnlyAudio(this)
+                s.setCustomAudioEffect(gainEffect)
+                s.prepareAudio(128_000, 44100, false)
+                s.startStream(rtmpUrl)
+                stream = s
+            }
+        }.start()
     }
 
     private fun stopStream() {
@@ -194,6 +235,114 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
         serviceConn = null
         stopService(Intent(this, BroadcastService::class.java))
         setState(State.OFFLINE)
+
+        Thread {
+            val prefs = getSharedPreferences("kyo_radio", MODE_PRIVATE)
+            val serverUrl = prefs.getString("server_url", "https://kyo.sk/kyosky") ?: return@Thread
+            notifyLiveStop(serverUrl)
+            broadcasterToken = null
+        }.start()
+    }
+
+    // ── Settings & Auth ──────────────────────────────────────────────────────
+
+    private fun checkAndShowSetupDialog() {
+        val prefs = getSharedPreferences("kyo_radio", MODE_PRIVATE)
+        if (!prefs.contains("broadcaster_password")) {
+            showSettingsDialog()
+        }
+    }
+
+    private fun showSettingsDialog() {
+        val prefs = getSharedPreferences("kyo_radio", MODE_PRIVATE)
+        val currentUrl  = prefs.getString("server_url", "https://kyo.sk/kyosky") ?: "https://kyo.sk/kyosky"
+        val currentPass = prefs.getString("broadcaster_password", "") ?: ""
+
+        val view = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 40, 40, 40)
+        }
+        val urlInput = TextInputEditText(this).apply {
+            setText(currentUrl)
+            hint = "Server URL"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+        }
+        val passInput = TextInputEditText(this).apply {
+            setText(currentPass)
+            hint = "Broadcaster Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        view.addView(urlInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        view.addView(passInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 20
+        })
+
+        AlertDialog.Builder(this)
+            .setTitle("Broadcaster Settings")
+            .setView(view)
+            .setPositiveButton("Save") { _, _ ->
+                val url  = urlInput.text.toString().trim()
+                val pass = passInput.text.toString().trim()
+                if (url.isNotEmpty() && pass.isNotEmpty()) {
+                    prefs.edit().apply {
+                        putString("server_url", url)
+                        putString("broadcaster_password", pass)
+                        apply()
+                    }
+                } else {
+                    setState(State.ERROR, "Invalid settings")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun authenticate(serverUrl: String, password: String): Boolean {
+        return try {
+            val conn = URL("$serverUrl/api/radio/auth").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = JSONObject().put("password", password).toString()
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode == 200) {
+                val response = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(response)
+                val authenticated = json.optBoolean("authenticated", false)
+                if (authenticated) {
+                    broadcasterToken = json.optString("token", null)
+                }
+                authenticated
+            } else false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun notifyLiveStart(serverUrl: String): Boolean {
+        return try {
+            val conn = URL("$serverUrl/api/radio/live/start").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            if (broadcasterToken != null) {
+                conn.setRequestProperty("X-Broadcaster-Token", broadcasterToken!!)
+            }
+            conn.responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun notifyLiveStop(serverUrl: String): Boolean {
+        return try {
+            val conn = URL("$serverUrl/api/radio/live/stop").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            if (broadcasterToken != null) {
+                conn.setRequestProperty("X-Broadcaster-Token", broadcasterToken!!)
+            }
+            conn.responseCode == 200
+        } catch (e: Exception) {
+            false
+        }
     }
 
     // ── ConnectChecker ────────────────────────────────────────────────────────
