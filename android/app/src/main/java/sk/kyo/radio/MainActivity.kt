@@ -305,7 +305,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 val json = JSONObject(response)
                 val authenticated = json.optBoolean("authenticated", false)
                 if (authenticated) {
-                    broadcasterToken = json.optString("token", null)
+                    broadcasterToken = json.optString("token", "")
                 }
                 authenticated
             } else false
