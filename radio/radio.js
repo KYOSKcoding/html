@@ -1448,6 +1448,30 @@ class ArchivePlayer {
         this._playing = false;
         this.playPauseBtn.textContent = '▶';
     }
+
+    async makeInvisible(filename) {
+        try {
+            const token = (window.radioPlayer && window.radioPlayer.broadcasterToken) || '';
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const baseUrl = isLocal ? 'http://localhost:5001' : '/kyosky';
+            const response = await fetch(`${baseUrl}/api/radio/files/move`, {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, source: 'archive', dest: 'invisible' })
+            });
+            if (response.ok) {
+                this.scanArchive();
+                if (window.invisibleArchiveManager) window.invisibleArchiveManager.loadFiles();
+            } else {
+                const err = await response.json();
+                alert('Failed to move to invisible: ' + (err.error || response.status));
+                console.error('Move to invisible error:', err);
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+            console.error('Move to invisible exception:', e);
+        }
+    }
 }
 
 class InvisibleArchiveManager {
@@ -1608,10 +1632,13 @@ class InvisibleArchiveManager {
                 this.loadFiles();
                 if (window.archivePlayer) window.archivePlayer.scanArchive();
             } else {
-                alert('Failed to approve');
+                const err = await response.json();
+                alert('Failed to approve: ' + (err.error || response.status));
+                console.error('Move to archive error:', err);
             }
         } catch (e) {
             alert('Error: ' + e.message);
+            console.error('Move to archive exception:', e);
         }
     }
 
@@ -1627,10 +1654,13 @@ class InvisibleArchiveManager {
             if (response.ok) {
                 this.loadFiles();
             } else {
-                alert('Failed to delete');
+                const err = await response.json();
+                alert('Failed to delete: ' + (err.error || response.status));
+                console.error('Delete error:', err);
             }
         } catch (e) {
             alert('Error: ' + e.message);
+            console.error('Delete exception:', e);
         }
     }
 
