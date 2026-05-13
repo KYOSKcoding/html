@@ -40,7 +40,7 @@
             android:textStyle="bold" />
     </FrameLayout>
 
-    <!-- Outlined buttons — website play-button style -->
+    <!-- Toggle button — switches between GO LIVE and STOP -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnStart"
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
@@ -55,23 +55,6 @@
         app:strokeWidth="2dp"
         app:backgroundTint="@android:color/transparent"
         app:rippleColor="#1a00ff00"
-        android:layout_marginBottom="14dp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStop"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="220dp"
-        android:layout_height="56dp"
-        android:text="@string/btn_stop"
-        android:fontFamily="monospace"
-        android:textColor="#666666"
-        android:textSize="15sp"
-        android:letterSpacing="0.08"
-        app:strokeColor="#444444"
-        app:strokeWidth="2dp"
-        app:backgroundTint="@android:color/transparent"
-        app:rippleColor="#1a888888"
-        android:enabled="false"
         android:layout_marginBottom="44dp" />
 
     <TextView
@@ -103,7 +86,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="0"
+            android:text="-20dB"
             android:textColor="#00aa00"
             android:textSize="10sp"
             android:fontFamily="monospace"
@@ -113,7 +96,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="50"
+            android:text="0dB"
             android:textColor="#00aa00"
             android:textSize="10sp"
             android:fontFamily="monospace"
@@ -123,7 +106,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="100"
+            android:text="+20dB"
             android:textColor="#00aa00"
             android:textSize="10sp"
             android:fontFamily="monospace"

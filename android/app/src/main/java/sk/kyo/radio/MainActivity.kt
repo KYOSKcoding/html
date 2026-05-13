@@ -30,16 +30,16 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private lateinit var tvStatus: TextView
     private lateinit var statusCircle: FrameLayout
     private lateinit var btnStart: MaterialButton
-    private lateinit var btnStop: MaterialButton
     private lateinit var btnSettings: MaterialButton
     private lateinit var seekVolume: SeekBar
 
     private var stream: RtmpOnlyAudio? = null
     private var serviceConn: ServiceConnection? = null
     private var broadcasterToken: String? = null
+    private var currentState: State = State.OFFLINE
 
-    // Slider 0–100 → gain 0–16x (50 = 8x default)
-    private var gainMultiplier = 8.0f
+    // Slider 0–100 → ±20dB (50 = 0dB default)
+    private var gainMultiplier = 1.0f
 
     private val gainEffect = object : CustomAudioEffect() {
         // Downward compressor: tames peaks so makeup gain lifts the average
@@ -89,20 +89,21 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
         tvStatus    = findViewById(R.id.tvStatus)
         statusCircle = findViewById(R.id.statusCircle)
         btnStart    = findViewById(R.id.btnStart)
-        btnStop     = findViewById(R.id.btnStop)
         btnSettings = findViewById(R.id.btnSettings)
         seekVolume  = findViewById(R.id.seekVolume)
 
         seekVolume.progress = 50
-        gainMultiplier = 8.0f
+        gainMultiplier = 1.0f
 
-        btnStart.setOnClickListener { checkPermissionAndStart() }
-        btnStop.setOnClickListener  { stopStream() }
+        btnStart.setOnClickListener {
+            if (currentState == State.LIVE) stopStream() else checkPermissionAndStart()
+        }
         btnSettings.setOnClickListener { showSettingsDialog() }
 
         seekVolume.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, progress: Int, fromUser: Boolean) {
-                gainMultiplier = progress / 100.0f * 16.0f
+                val dB = (progress - 50) / 50.0 * 20.0
+                gainMultiplier = Math.pow(10.0, dB / 20.0).toFloat()
             }
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onStopTrackingTouch(sb: SeekBar) {}
@@ -117,43 +118,37 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private enum class State { OFFLINE, CONNECTING, LIVE, ERROR }
 
     private fun setState(state: State, error: String = "") = runOnUiThread {
+        currentState = state
         when (state) {
             State.OFFLINE -> {
                 tvStatus.text = "OFFLINE"
-                tvStatus.setTextColor(0xFFFF6600.toInt())
+                tvStatus.setTextColor(0xFF888888.toInt())
                 statusCircle.setBackgroundResource(R.drawable.circle_offline)
+                btnStart.text = "▶ GO LIVE"
                 btnStart.isEnabled = true
-                setStopEnabled(false)
             }
             State.CONNECTING -> {
                 tvStatus.text = "CONNECTING"
-                tvStatus.setTextColor(0xFF00AA00.toInt())
+                tvStatus.setTextColor(0xFF888888.toInt())
                 statusCircle.setBackgroundResource(R.drawable.circle_connecting)
+                btnStart.text = "● CONNECTING…"
                 btnStart.isEnabled = false
-                setStopEnabled(false)
             }
             State.LIVE -> {
                 tvStatus.text = "LIVE"
-                tvStatus.setTextColor(0xFF00FF00.toInt())
+                tvStatus.setTextColor(0xFFFF4444.toInt())
                 statusCircle.setBackgroundResource(R.drawable.circle_live)
-                btnStart.isEnabled = false
-                setStopEnabled(true)
+                btnStart.text = "■ STOP"
+                btnStart.isEnabled = true
             }
             State.ERROR -> {
                 tvStatus.text = if (error.isNotEmpty()) error.take(10) else "ERROR"
                 tvStatus.setTextColor(0xFFFF4444.toInt())
                 statusCircle.setBackgroundResource(R.drawable.circle_offline)
+                btnStart.text = "▶ GO LIVE"
                 btnStart.isEnabled = true
-                setStopEnabled(false)
             }
         }
-    }
-
-    private fun setStopEnabled(enabled: Boolean) {
-        btnStop.isEnabled = enabled
-        val color = if (enabled) 0xFF00FF00.toInt() else 0xFF444444.toInt()
-        btnStop.setTextColor(color)
-        btnStop.strokeColor = android.content.res.ColorStateList.valueOf(color)
     }
 
     // ── Streaming ─────────────────────────────────────────────────────────────
