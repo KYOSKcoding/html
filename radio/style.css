@@ -968,3 +968,15 @@ body {
     background: rgba(0, 255, 0, 0.2);
     color: #00ff00;
 }
+
+.file-action-btn.rename-btn {
+    border-color: #4488aa;
+    background: rgba(68, 136, 170, 0.1);
+    color: #4488aa;
+}
+
+.file-action-btn.rename-btn:hover {
+    border-color: #66bbdd;
+    background: rgba(68, 136, 170, 0.2);
+    color: #66bbdd;
+}

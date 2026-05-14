@@ -18,7 +18,8 @@ echo "[radio-hls] started"
 while true; do
   rm -f "$RADIO_DIR"/*.ts "$RADIO_DIR"/index.m3u8
   TS=$(date +%Y-%m-%d_%H-%M-%S)
-  ARCHIVE="$ARCHIVE_DIR/${TS}_LIVE.mp3"
+  TITLE=$(cat "$TITLE_FILE" 2>/dev/null | tr -cd '[:alnum:]_-' | cut -c1-40)
+  ARCHIVE="$ARCHIVE_DIR/${TS}_LIVE${TITLE:+_${TITLE}}.mp3"
 
   kyo_live stop
   echo "[radio-hls] listening on :45860, will archive to $ARCHIVE"

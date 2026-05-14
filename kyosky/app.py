@@ -861,7 +861,10 @@ def _ensure_relay_encoder() -> bool:
         return True
 
     ts_stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
-    fname = f"{ts_stamp}_LIVE.mp3"
+    with RADIO_STATE_LOCK:
+        title = RADIO_STATE.get("broadcast_title", "")
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in title).strip("_")[:40]
+    fname = f"{ts_stamp}_LIVE{'_' + safe if safe else ''}.mp3"
     invisible_archive_dir = os.path.join(RADIO_DIR, "archive", "invisible")
     os.makedirs(invisible_archive_dir, exist_ok=True)
     archive_path = os.path.join(invisible_archive_dir, fname)
@@ -1207,6 +1210,54 @@ def radio_files_move():
         return jsonify({"success": True, "source": source, "dest": dest})
     except Exception as e:
         logger.error(f"Error moving file: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/radio/files/rename", methods=["POST"])
+@app.route("/kyosky/api/radio/files/rename", methods=["POST"])
+def radio_files_rename():
+    """Rename a file within the same directory — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    data = request.json or {}
+    old_name = data.get("old_name", "")
+    new_name = data.get("new_name", "").strip()
+    source = data.get("source", "invisible")
+
+    # Ensure .mp3 extension
+    if not new_name.lower().endswith(".mp3"):
+        new_name += ".mp3"
+
+    # Validate both filenames (no path traversal)
+    for name in (old_name, new_name):
+        if not name or os.path.basename(name) != name or not name.lower().endswith(".mp3"):
+            return jsonify({"success": False, "error": "invalid_filename"}), 400
+
+    paths = {
+        "music": RADIO_DIR,
+        "archive": os.path.join(RADIO_DIR, "archive"),
+        "invisible": os.path.join(RADIO_DIR, "archive", "invisible"),
+    }
+    if source not in paths:
+        return jsonify({"success": False, "error": "invalid_source"}), 400
+
+    dir_path = paths[source]
+    old_path = os.path.join(dir_path, old_name)
+    new_path = os.path.join(dir_path, new_name)
+
+    if not os.path.exists(old_path):
+        return jsonify({"success": False, "error": "file_not_found"}), 404
+    if os.path.exists(new_path) and old_name != new_name:
+        return jsonify({"success": False, "error": "name_taken"}), 409
+
+    try:
+        os.rename(old_path, new_path)
+        logger.info(f"Renamed file: {source}/{old_name} → {source}/{new_name}")
+        return jsonify({"success": True, "new_name": new_name})
+    except Exception as e:
+        logger.error(f"Error renaming file: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

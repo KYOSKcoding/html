@@ -1595,10 +1595,20 @@ class InvisibleArchiveManager {
             const buttonsDiv = document.createElement('div');
             buttonsDiv.className = 'file-action-buttons';
 
+            const renameBtn = document.createElement('button');
+            renameBtn.className = 'file-action-btn rename-btn';
+            renameBtn.title = 'Rename';
+            renameBtn.innerHTML = '✏';
+            renameBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.startRename(li, span, filename);
+            });
+            buttonsDiv.appendChild(renameBtn);
+
             const visibleBtn = document.createElement('button');
             visibleBtn.className = 'file-action-btn approve-btn';
             visibleBtn.title = 'Make Visible (Move to Public Archive)';
-            visibleBtn.innerHTML = '← Visible';
+            visibleBtn.innerHTML = '←';
             visibleBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.moveToPublicArchive(filename);
@@ -1608,7 +1618,7 @@ class InvisibleArchiveManager {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'file-action-btn delete-btn';
             deleteBtn.title = 'Delete';
-            deleteBtn.innerHTML = '✕ Delete';
+            deleteBtn.innerHTML = '✕';
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteFile(filename);
@@ -1730,6 +1740,36 @@ class InvisibleArchiveManager {
     formatTime(secs) {
         const s = Math.max(0, secs || 0);
         return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    }
+
+    startRename(li, span, oldFilename) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'rename-input';
+        input.value = oldFilename.replace(/\.mp3$/i, '');
+        input.style.cssText = 'flex:1; background:#111; color:#0f0; border:1px solid #0a0; font-family:monospace; font-size:0.85em; padding:2px 6px;';
+        span.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const commit = async () => {
+            const newBase = input.value.trim();
+            if (!newBase || newBase + '.mp3' === oldFilename) { input.replaceWith(span); return; }
+            const newFilename = newBase + '.mp3';
+            const token = (window.radioPlayer && window.radioPlayer.broadcasterToken) || '';
+            const r = await fetch(this.getApiUrl('/api/radio/files/rename'), {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old_name: oldFilename, new_name: newFilename, source: 'invisible' })
+            });
+            if (r.ok) { this.loadFiles(); }
+            else { input.replaceWith(span); const e = await r.json(); alert('Rename failed: ' + (e.error || r.status)); }
+        };
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { input.replaceWith(span); }
+        });
+        input.addEventListener('blur', () => setTimeout(() => { if (document.contains(input)) input.replaceWith(span); }, 200));
     }
 
     async makeInvisible(filename) {
