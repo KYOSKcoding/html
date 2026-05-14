@@ -690,13 +690,14 @@ def radio_audio():
 @app.route("/api/radio/live/start", methods=["POST"])
 @app.route("/kyosky/api/radio/live/start", methods=["POST"])
 def live_start():
-    """Switch all listeners to live stream — requires valid broadcaster token.
+    """Switch all listeners to live stream — requires valid broadcaster token or server password.
 
     If HLS is already ready, enables live_mode immediately. Otherwise sets live_pending=True
     so the watchdog auto-enables live_mode as soon as fresh HLS segments appear.
     """
     token = request.headers.get("X-Broadcaster-Token", "")
-    if not _validate_broadcaster_token(token):
+    server_pwd = request.headers.get("X-Server-Password", "")
+    if not _validate_broadcaster_token(token) and server_pwd != BROADCAST_PASSWORD:
         return jsonify({"success": False, "error": "unauthorized"}), 401
     hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
     hls_ready = os.path.exists(hls_index) and (
@@ -722,9 +723,10 @@ def live_start():
 @app.route("/api/radio/live/stop", methods=["POST"])
 @app.route("/kyosky/api/radio/live/stop", methods=["POST"])
 def live_stop():
-    """Return all listeners to recorded audio — requires valid broadcaster token."""
+    """Return all listeners to recorded audio — requires valid broadcaster token or server password."""
     token = request.headers.get("X-Broadcaster-Token", "")
-    if not _validate_broadcaster_token(token):
+    server_pwd = request.headers.get("X-Server-Password", "")
+    if not _validate_broadcaster_token(token) and server_pwd != BROADCAST_PASSWORD:
         return jsonify({"success": False, "error": "unauthorized"}), 401
     with RADIO_STATE_LOCK:
         RADIO_STATE["live_mode"] = False
