@@ -5,7 +5,7 @@ TITLE_FILE=~/html/radio/.broadcast_title
 KYO_API="https://kyo.sk/kyosky/api"
 KYO_PASS="broadcast"
 
-mkdir -p "$RADIO_DIR"
+mkdir -p "$RADIO_DIR" "$ARCHIVE_DIR"
 
 kyo_live() {
   curl -s -X POST "$KYO_API/radio/live/$1" \
