@@ -69,7 +69,8 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             val peak = meterPeak
             meterPeak = 0f
             val db = if (peak > 0f) 20.0 * Math.log10(peak.toDouble()) else -96.0
-            val target = (((db + 48.0) / 48.0) * 100).coerceIn(0.0, 100.0).toInt()
+            // -24..0 dBFS over the bar: green ends ~-12 dBFS, orange mid, red near clip.
+            val target = (((db + 24.0) / 24.0) * 100).coerceIn(0.0, 100.0).toInt()
             // Snappy rise, smooth fall.
             meterDisplayed = if (target >= meterDisplayed) target else maxOf(target, meterDisplayed - 4)
             levelMeter.progress = meterDisplayed
