@@ -21,6 +21,9 @@ echo "[radio-hls] started"
 
 while true; do
   rm -f "$RADIO_DIR"/*.ts "$RADIO_DIR"/index.m3u8
+  # Re-create dirs every cycle — ffmpeg dies instantly if the archive
+  # output dir is missing, which breaks the broadcaster's RTMP pipe.
+  mkdir -p "$RADIO_DIR" "$ARCHIVE_DIR"
   TS=$(date +%Y-%m-%d_%H-%M-%S)
   TITLE=$(cat "$TITLE_FILE" 2>/dev/null | tr -cd '[:alnum:]_-' | cut -c1-40)
   ARCHIVE="$ARCHIVE_DIR/${TS}_LIVE${TITLE:+_${TITLE}}.mp3"
