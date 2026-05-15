@@ -43,10 +43,9 @@ class BroadcastService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        val stopIntent = Intent(this, BroadcastService::class.java).apply {
-            action = ACTION_STOP
-        }
-        val stopPi = PendingIntent.getService(
+        // Broadcast to MainActivity's receiver — it owns the stream object.
+        val stopIntent = Intent(ACTION_STOP).setPackage(packageName)
+        val stopPi = PendingIntent.getBroadcast(
             this, 0, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

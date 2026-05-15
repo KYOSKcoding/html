@@ -2,15 +2,22 @@ package sk.kyo.radio
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -21,9 +28,16 @@ import com.google.android.material.textfield.TextInputEditText
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.audio.CustomAudioEffect
 import com.pedro.library.rtmp.RtmpOnlyAudio
-import org.json.JSONObject
+import java.io.BufferedOutputStream
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity(), ConnectChecker {
 
@@ -32,6 +46,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private lateinit var btnStart: MaterialButton
     private lateinit var btnSettings: MaterialButton
     private lateinit var seekVolume: SeekBar
+    private lateinit var levelMeter: ProgressBar
 
     private var stream: RtmpOnlyAudio? = null
     private var serviceConn: ServiceConnection? = null
@@ -39,6 +54,38 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
     // Slider 0–100 → ±20dB (50 = 0dB default)
     private var gainMultiplier = 1.0f
+
+    // ── Audio constants — must match prepareAudio() below ─────────────────────
+    private val sampleRate = 44100
+    private val channels = 1            // prepareAudio(..., isStereo = false)
+    private val bitsPerSample = 16
+
+    // ── Live level meter — peak written by the audio thread, read by the UI ──
+    @Volatile private var meterPeak = 0f
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private var meterDisplayed = 0
+    private val meterTick = object : Runnable {
+        override fun run() {
+            val peak = meterPeak
+            meterPeak = 0f
+            val db = if (peak > 0f) 20.0 * Math.log10(peak.toDouble()) else -96.0
+            val target = (((db + 48.0) / 48.0) * 100).coerceIn(0.0, 100.0).toInt()
+            // Snappy rise, smooth fall.
+            meterDisplayed = if (target >= meterDisplayed) target else maxOf(target, meterDisplayed - 4)
+            levelMeter.progress = meterDisplayed
+            uiHandler.postDelayed(this, 40)   // ~25 Hz
+        }
+    }
+
+    // ── Local .wav recording ─────────────────────────────────────────────────
+    @Volatile private var wavOut: BufferedOutputStream? = null
+    @Volatile private var wavBytes = 0L
+    private var wavFile: File? = null
+
+    // ── Reconnect ─────────────────────────────────────────────────────────────
+    private var streamWanted = false
+    private var reconnectAttempts = 0
+    private val maxReconnects = 5
 
     private val gainEffect = object : CustomAudioEffect() {
         // Downward compressor: tames peaks so makeup gain lifts the average
@@ -51,6 +98,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
         override fun process(pcm: ByteArray): ByteArray {
             val out = ByteArray(pcm.size)
+            var peakInBuffer = 0f
             var i = 0
             while (i < pcm.size - 1) {
                 val lo = pcm[i].toInt() and 0xFF
@@ -70,16 +118,37 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 else 1f
 
                 val result = (gained * gr * makeupGain).coerceIn(-1f, 1f)
+                val ra = if (result < 0f) -result else result
+                if (ra > peakInBuffer) peakInBuffer = ra
+
                 val outInt = (result * 32767f).toInt()
                 out[i]     = (outInt and 0xFF).toByte()
                 out[i + 1] = ((outInt shr 8) and 0xFF).toByte()
                 i += 2
+            }
+            // Meter + local recording — must never break the audio path.
+            try {
+                if (peakInBuffer > meterPeak) meterPeak = peakInBuffer
+                val w = wavOut
+                if (w != null) {
+                    w.write(out)
+                    wavBytes += out.size.toLong()
+                }
+            } catch (e: Exception) {
+                stopWavRecording()   // disk full / I/O error — drop recording, keep streaming
             }
             return out
         }
     }
 
     private val rtmpUrl = "rtmp://kyo.sk:45860/live/stream"
+
+    // Notification "Stop" action — MainActivity owns the stream object.
+    private val stopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (currentState == State.LIVE || currentState == State.CONNECTING) stopStream()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,6 +159,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
         btnStart    = findViewById(R.id.btnStart)
         btnSettings = findViewById(R.id.btnSettings)
         seekVolume  = findViewById(R.id.seekVolume)
+        levelMeter  = findViewById(R.id.levelMeter)
 
         seekVolume.progress = 50
         gainMultiplier = 1.0f
@@ -108,6 +178,14 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             override fun onStopTrackingTouch(sb: SeekBar) {}
         })
 
+        val filter = IntentFilter(BroadcastService.ACTION_STOP)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(stopReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(stopReceiver, filter)
+        }
+
         checkAndShowSetupDialog()
         setState(State.OFFLINE)
     }
@@ -125,6 +203,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 statusCircle.setBackgroundResource(R.drawable.circle_offline)
                 btnStart.text = "▶ GO LIVE"
                 btnStart.isEnabled = true
+                stopMeter()
             }
             State.CONNECTING -> {
                 tvStatus.text = "CONNECTING"
@@ -132,6 +211,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 statusCircle.setBackgroundResource(R.drawable.circle_connecting)
                 btnStart.text = "● CONNECTING…"
                 btnStart.isEnabled = false
+                startMeter()
             }
             State.LIVE -> {
                 tvStatus.text = "LIVE"
@@ -139,6 +219,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 statusCircle.setBackgroundResource(R.drawable.circle_live)
                 btnStart.text = "■ STOP"
                 btnStart.isEnabled = true
+                startMeter()
             }
             State.ERROR -> {
                 tvStatus.text = if (error.isNotEmpty()) error.take(10) else "ERROR"
@@ -146,8 +227,23 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 statusCircle.setBackgroundResource(R.drawable.circle_offline)
                 btnStart.text = "▶ GO LIVE"
                 btnStart.isEnabled = true
+                stopMeter()
             }
         }
+    }
+
+    // ── Level meter ───────────────────────────────────────────────────────────
+
+    private fun startMeter() {
+        uiHandler.removeCallbacks(meterTick)
+        uiHandler.post(meterTick)
+    }
+
+    private fun stopMeter() {
+        uiHandler.removeCallbacks(meterTick)
+        meterDisplayed = 0
+        meterPeak = 0f
+        levelMeter.progress = 0
     }
 
     // ── Streaming ─────────────────────────────────────────────────────────────
@@ -175,6 +271,8 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
     private fun startStream() {
         setState(State.CONNECTING)
+        streamWanted = true
+        reconnectAttempts = 0
 
         // Streaming on background thread — send password directly as X-Broadcaster-Token
         Thread {
@@ -190,13 +288,10 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 return@Thread
             }
 
-            if (!notifyLiveStart(serverUrl, password)) {
-                setState(State.ERROR, "live")
-                stopService(Intent(this, BroadcastService::class.java))
-                return@Thread
-            }
+            // Best-effort: the server's start-radio-hls.sh also flips live mode
+            // on RTMP connect, so a failed call here must not abort the broadcast.
+            notifyLiveStart(serverUrl, password)
 
-            // Notified server — start streaming on UI thread
             runOnUiThread {
                 val svcIntent = Intent(this, BroadcastService::class.java)
                 ContextCompat.startForegroundService(this, svcIntent)
@@ -207,9 +302,11 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 serviceConn = conn
                 bindService(svcIntent, conn, Context.BIND_AUTO_CREATE)
 
+                if (prefs.getBoolean("record_wav", true)) startWavRecording()
+
                 val s = RtmpOnlyAudio(this)
                 s.setCustomAudioEffect(gainEffect)
-                s.prepareAudio(128_000, 44100, false)
+                s.prepareAudio(128_000, sampleRate, false)
                 s.startStream(rtmpUrl)
                 stream = s
             }
@@ -217,8 +314,10 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     }
 
     private fun stopStream() {
+        streamWanted = false
         stream?.stopStream()
         stream = null
+        stopWavRecording()   // stream stopped first — no concurrent process() writes
         serviceConn?.let { runCatching { unbindService(it) } }
         serviceConn = null
         stopService(Intent(this, BroadcastService::class.java))
@@ -230,6 +329,74 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             val password = prefs.getString("broadcaster_password", "") ?: return@Thread
             notifyLiveStop(serverUrl, password)
         }.start()
+    }
+
+    /** Final give-up after reconnects are exhausted — caller already set ERROR. */
+    private fun cleanupAfterFailure() {
+        streamWanted = false
+        stream = null
+        stopWavRecording()
+        serviceConn?.let { runCatching { unbindService(it) } }
+        serviceConn = null
+        stopService(Intent(this, BroadcastService::class.java))
+    }
+
+    // ── Local .wav recording ──────────────────────────────────────────────────
+
+    private fun startWavRecording() {
+        try {
+            val dir = File(getExternalFilesDir(null), "recordings")
+            dir.mkdirs()
+            val ts = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
+            val f = File(dir, "kyo_$ts.wav")
+            val os = BufferedOutputStream(FileOutputStream(f))
+            os.write(wavHeader(0))   // placeholder sizes — patched on stop
+            wavFile = f
+            wavBytes = 0L
+            wavOut = os
+        } catch (e: Exception) {
+            wavOut = null
+            wavFile = null
+        }
+    }
+
+    private fun stopWavRecording() {
+        val os = wavOut ?: return
+        wavOut = null
+        try { os.flush(); os.close() } catch (e: Exception) {}
+        val f = wavFile ?: return
+        wavFile = null
+        try {
+            val dataLen = wavBytes.toInt()
+            RandomAccessFile(f, "rw").use { raf ->
+                raf.seek(4);  raf.write(leInt(36 + dataLen))   // RIFF chunk size
+                raf.seek(40); raf.write(leInt(dataLen))        // data chunk size
+            }
+        } catch (e: Exception) {}
+    }
+
+    private fun leInt(v: Int) = byteArrayOf(
+        (v and 0xFF).toByte(),
+        ((v shr 8) and 0xFF).toByte(),
+        ((v shr 16) and 0xFF).toByte(),
+        ((v shr 24) and 0xFF).toByte()
+    )
+
+    private fun leShort(v: Int) = byteArrayOf(
+        (v and 0xFF).toByte(),
+        ((v shr 8) and 0xFF).toByte()
+    )
+
+    private fun wavHeader(dataLen: Int): ByteArray {
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val h = ByteArrayOutputStream(44)
+        h.write("RIFF".toByteArray()); h.write(leInt(36 + dataLen)); h.write("WAVE".toByteArray())
+        h.write("fmt ".toByteArray()); h.write(leInt(16)); h.write(leShort(1))   // PCM
+        h.write(leShort(channels)); h.write(leInt(sampleRate)); h.write(leInt(byteRate))
+        h.write(leShort(blockAlign)); h.write(leShort(bitsPerSample))
+        h.write("data".toByteArray()); h.write(leInt(dataLen))
+        return h.toByteArray()
     }
 
     // ── Settings & Auth ──────────────────────────────────────────────────────
@@ -260,8 +427,15 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             hint = "Broadcaster Password"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
+        val recordCheck = CheckBox(this).apply {
+            text = "Record .wav locally while streaming"
+            isChecked = prefs.getBoolean("record_wav", true)
+        }
         view.addView(urlInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         view.addView(passInput, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = 20
+        })
+        view.addView(recordCheck, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = 20
         })
 
@@ -275,6 +449,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                     prefs.edit().apply {
                         putString("server_url", url)
                         putString("broadcaster_password", pass)
+                        putBoolean("record_wav", recordCheck.isChecked)
                         apply()
                     }
                 } else {
@@ -310,13 +485,38 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     // ── ConnectChecker ────────────────────────────────────────────────────────
 
     override fun onConnectionStarted(url: String) = setState(State.CONNECTING)
-    override fun onConnectionSuccess()             = setState(State.LIVE)
-    override fun onDisconnect()                    = setState(State.OFFLINE)
+
+    override fun onConnectionSuccess() {
+        reconnectAttempts = 0
+        setState(State.LIVE)
+    }
+
+    override fun onDisconnect() {
+        if (!streamWanted) setState(State.OFFLINE)
+    }
 
     override fun onConnectionFailed(reason: String) {
-        setState(State.ERROR, reason)
-        stopService(Intent(this, BroadcastService::class.java))
-        stream = null
+        // Auto-reconnect through transient network drops; the .wav file and the
+        // foreground service stay alive so one broadcast remains one recording.
+        if (streamWanted && stream != null && reconnectAttempts < maxReconnects) {
+            reconnectAttempts++
+            setState(State.CONNECTING)
+            uiHandler.postDelayed({
+                val s = stream
+                if (streamWanted && s != null) {
+                    try {
+                        s.stopStream()
+                        s.startStream(rtmpUrl)
+                    } catch (e: Exception) {
+                        setState(State.ERROR, "reconnect")
+                        cleanupAfterFailure()
+                    }
+                }
+            }, 5000)
+        } else {
+            setState(State.ERROR, reason)
+            cleanupAfterFailure()
+        }
     }
 
     override fun onAuthError()         { setState(State.ERROR, "auth") }
@@ -325,6 +525,8 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
     override fun onDestroy() {
         stopStream()
+        uiHandler.removeCallbacksAndMessages(null)
+        runCatching { unregisterReceiver(stopReceiver) }
         super.onDestroy()
     }
 }

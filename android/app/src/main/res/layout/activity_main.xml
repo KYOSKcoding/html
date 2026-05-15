@@ -113,6 +113,26 @@
             android:gravity="end" />
     </LinearLayout>
 
+    <!-- Live input level meter -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/label_level"
+        android:textColor="#00aa00"
+        android:textSize="13sp"
+        android:fontFamily="monospace"
+        android:layout_marginTop="20dp"
+        android:layout_marginBottom="8dp" />
+
+    <ProgressBar
+        android:id="@+id/levelMeter"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="280dp"
+        android:layout_height="10dp"
+        android:max="100"
+        android:progress="0"
+        android:progressTint="#00ff00" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSettings"
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"

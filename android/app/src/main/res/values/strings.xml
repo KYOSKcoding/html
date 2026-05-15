@@ -4,6 +4,7 @@
     <string name="btn_start">▶ GO LIVE</string>
     <string name="btn_stop">■ STOP</string>
     <string name="label_volume">Mic Volume</string>
+    <string name="label_level">Input Level</string>
     <string name="notif_channel">Broadcast</string>
     <string name="notif_title">Ky Radio — Live</string>
     <string name="notif_text">Streaming to kyo.sk</string>
