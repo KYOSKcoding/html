@@ -273,7 +273,7 @@ class RadioPlayer {
             return;
         }
 
-        if (this.needsInitialSync) {
+        if (this.needsInitialSync && !this.liveMode) {
             this.needsInitialSync = false;
             try {
                 const interpolated = this.isPlaying
@@ -1148,22 +1148,43 @@ class RadioPlayer {
             this.audioElement.addEventListener('canplay', onReady, { once: true });
             this.audioElement.load();
         } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-            this._hls = new Hls();
-            this._hls.loadSource(url);
-            this._hls.attachMedia(this.audioElement);
-            this._hls.on(Hls.Events.MANIFEST_PARSED, onReady);
+            this._initHls(url, onReady);
         } else {
             const s = document.createElement('script');
             s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
             s.onload = () => {
                 if (!Hls.isSupported()) { this.showError('HLS not supported in this browser'); return; }
-                this._hls = new Hls();
-                this._hls.loadSource(url);
-                this._hls.attachMedia(this.audioElement);
-                this._hls.on(Hls.Events.MANIFEST_PARSED, onReady);
+                this._initHls(url, onReady);
             };
             document.head.appendChild(s);
         }
+    }
+
+    _initHls(url, onReady) {
+        const hls = new Hls({
+            liveDurationInfinity: true,   // treat as infinite live, not a finite clip
+            maxBufferLength: 30,
+            manifestLoadingMaxRetry: 6,
+            levelLoadingMaxRetry: 6,
+            fragLoadingMaxRetry: 6,
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, onReady);
+        hls.on(Hls.Events.ERROR, (evt, data) => {
+            if (!data.fatal) return;   // hls.js recovers non-fatal errors itself
+            console.warn('[HLS] fatal error, recovering:', data.type, data.details);
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                hls.startLoad();              // re-fetch playlist/segments
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                hls.recoverMediaError();      // flush + re-init decoder
+            } else {
+                hls.destroy();                // unrecoverable — rebuild
+                this._hls = null;
+                if (this.liveMode) setTimeout(() => this.switchToLive(), 1000);
+            }
+        });
+        hls.loadSource(url);
+        hls.attachMedia(this.audioElement);
+        this._hls = hls;
     }
 
     switchToFile() {

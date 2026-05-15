@@ -36,7 +36,7 @@ while true; do
     -map 0:a -c:a libmp3lame -b:a 128k \
     -f hls \
     -hls_time 3 \
-    -hls_list_size 5 \
+    -hls_list_size 10 \
     -hls_flags delete_segments \
     -hls_segment_filename "$RADIO_DIR/seg%03d.ts" \
     "$RADIO_DIR/index.m3u8" \
