@@ -32,7 +32,7 @@ while true; do
   SIZE=$(wc -c < "$CURR" 2>/dev/null || echo 0)
   if [ "$SIZE" -ge 500 ]; then
     HTTP=$(curl -sf -o /dev/null -w "%{http_code}" -X POST \
-      -H "X-Broadcast-Password: $PASSWORD" \
+      -H "X-Broadcaster-Token: $PASSWORD" \
       -H "Content-Type: audio/ogg" \
       --data-binary @"$CURR" \
       "$SERVER/api/radio/relay-segment")

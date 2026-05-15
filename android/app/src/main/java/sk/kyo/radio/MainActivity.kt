@@ -35,7 +35,6 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
 
     private var stream: RtmpOnlyAudio? = null
     private var serviceConn: ServiceConnection? = null
-    private var broadcasterToken: String? = null
     private var currentState: State = State.OFFLINE
 
     // Slider 0–100 → ±20dB (50 = 0dB default)
@@ -177,7 +176,7 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
     private fun startStream() {
         setState(State.CONNECTING)
 
-        // Auth + streaming on background thread
+        // Streaming on background thread — send password directly as X-Broadcaster-Token
         Thread {
             val prefs     = getSharedPreferences("kyo_radio", MODE_PRIVATE)
             val serverUrl = prefs.getString("server_url", "https://kyo.sk/kyosky") ?: run {
@@ -191,19 +190,13 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
                 return@Thread
             }
 
-            if (!authenticate(serverUrl, password)) {
-                setState(State.ERROR, "auth")
-                stopService(Intent(this, BroadcastService::class.java))
-                return@Thread
-            }
-
-            if (!notifyLiveStart(serverUrl)) {
+            if (!notifyLiveStart(serverUrl, password)) {
                 setState(State.ERROR, "live")
                 stopService(Intent(this, BroadcastService::class.java))
                 return@Thread
             }
 
-            // Auth passed — start streaming on UI thread
+            // Notified server — start streaming on UI thread
             runOnUiThread {
                 val svcIntent = Intent(this, BroadcastService::class.java)
                 ContextCompat.startForegroundService(this, svcIntent)
@@ -234,8 +227,8 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
         Thread {
             val prefs = getSharedPreferences("kyo_radio", MODE_PRIVATE)
             val serverUrl = prefs.getString("server_url", "https://kyo.sk/kyosky") ?: return@Thread
-            notifyLiveStop(serverUrl)
-            broadcasterToken = null
+            val password = prefs.getString("broadcaster_password", "") ?: return@Thread
+            notifyLiveStop(serverUrl, password)
         }.start()
     }
 
@@ -292,48 +285,22 @@ class MainActivity : AppCompatActivity(), ConnectChecker {
             .show()
     }
 
-    private fun authenticate(serverUrl: String, password: String): Boolean {
-        return try {
-            val conn = URL("$serverUrl/api/radio/auth").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-            val body = JSONObject().put("password", password).toString()
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            if (conn.responseCode == 200) {
-                val response = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(response)
-                val authenticated = json.optBoolean("authenticated", false)
-                if (authenticated) {
-                    broadcasterToken = json.optString("token", "")
-                }
-                authenticated
-            } else false
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun notifyLiveStart(serverUrl: String): Boolean {
+    private fun notifyLiveStart(serverUrl: String, password: String): Boolean {
         return try {
             val conn = URL("$serverUrl/api/radio/live/start").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
-            if (broadcasterToken != null) {
-                conn.setRequestProperty("X-Broadcaster-Token", broadcasterToken!!)
-            }
+            conn.setRequestProperty("X-Broadcaster-Token", password)
             conn.responseCode == 200
         } catch (e: Exception) {
             false
         }
     }
 
-    private fun notifyLiveStop(serverUrl: String): Boolean {
+    private fun notifyLiveStop(serverUrl: String, password: String): Boolean {
         return try {
             val conn = URL("$serverUrl/api/radio/live/stop").openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
-            if (broadcasterToken != null) {
-                conn.setRequestProperty("X-Broadcaster-Token", broadcasterToken!!)
-            }
+            conn.setRequestProperty("X-Broadcaster-Token", password)
             conn.responseCode == 200
         } catch (e: Exception) {
             false

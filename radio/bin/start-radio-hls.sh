@@ -10,7 +10,7 @@ mkdir -p "$RADIO_DIR"
 kyo_live() {
   curl -s -X POST "$KYO_API/radio/live/$1" \
     -H "Content-Type: application/json" \
-    -H "X-Server-Password: $KYO_PASS" > /dev/null
+    -H "X-Broadcaster-Token: $KYO_PASS" > /dev/null
 }
 
 echo "[radio-hls] started"

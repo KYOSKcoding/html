@@ -370,15 +370,17 @@ def _session_active_locked():
 
 
 def _validate_broadcaster_token(token):
-    """If token matches the current session token, refresh last_seen and accept.
+    """Accept either a session token or the raw password.
 
-    The timeout is only used at /auth time to decide whether a new device can
-    take over. Once a broadcaster holds the token, they keep using it until
-    someone else explicitly logs in or they log out. This avoids spurious
-    'session expired' kicks when polling pauses (background tab, sleep, etc).
+    Raw password is always valid — acts as a permanent "service key" that
+    never touches or invalidates browser sessions (scripts/Android bypass auth).
+    Session tokens are checked against BROADCASTER_SESSION and refresh last_seen.
     """
     if not token:
         return False
+    # Raw password is always valid — does not touch the browser session
+    if token == BROADCAST_PASSWORD:
+        return True
     with BROADCASTER_LOCK:
         if BROADCASTER_SESSION["token"] != token:
             return False
@@ -690,14 +692,13 @@ def radio_audio():
 @app.route("/api/radio/live/start", methods=["POST"])
 @app.route("/kyosky/api/radio/live/start", methods=["POST"])
 def live_start():
-    """Switch all listeners to live stream — requires valid broadcaster token or server password.
+    """Switch all listeners to live stream — requires valid broadcaster token (session or raw password).
 
     If HLS is already ready, enables live_mode immediately. Otherwise sets live_pending=True
     so the watchdog auto-enables live_mode as soon as fresh HLS segments appear.
     """
     token = request.headers.get("X-Broadcaster-Token", "")
-    server_pwd = request.headers.get("X-Server-Password", "")
-    if not _validate_broadcaster_token(token) and server_pwd != BROADCAST_PASSWORD:
+    if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
     hls_index = os.path.join(HLS_LIVE_DIR, "index.m3u8")
     hls_ready = os.path.exists(hls_index) and (
@@ -723,10 +724,9 @@ def live_start():
 @app.route("/api/radio/live/stop", methods=["POST"])
 @app.route("/kyosky/api/radio/live/stop", methods=["POST"])
 def live_stop():
-    """Return all listeners to recorded audio — requires valid broadcaster token or server password."""
+    """Return all listeners to recorded audio — requires valid broadcaster token (session or raw password)."""
     token = request.headers.get("X-Broadcaster-Token", "")
-    server_pwd = request.headers.get("X-Server-Password", "")
-    if not _validate_broadcaster_token(token) and server_pwd != BROADCAST_PASSWORD:
+    if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
     with RADIO_STATE_LOCK:
         RADIO_STATE["live_mode"] = False
@@ -781,7 +781,7 @@ def receive_stream():
 @app.route("/kyosky/api/radio/relay-stream", methods=["PUT"])
 def relay_stream():
     """Accept raw OGG/AAC from a phone without ffmpeg; transcode server-side to HLS."""
-    token = request.headers.get("X-Auth-Token", "")
+    token = request.headers.get("X-Broadcaster-Token", "")
     if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
 
@@ -927,12 +927,12 @@ def relay_segment():
     """Receive a 4-second OGG segment, decode to PCM, feed persistent HLS encoder.
 
     Phone loops: record 4 s → POST here → repeat. No ffmpeg needed on phone.
-    Uses password-based auth so it never touches the browser broadcaster session.
+    Uses unified auth (token can be session token or raw password).
     All segments feed one continuous ffmpeg process — no per-segment PTS resets,
     no EXT-X-DISCONTINUITY, no gaps between segments.
     """
-    password = request.headers.get("X-Broadcast-Password", "")
-    if password != BROADCAST_PASSWORD:
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
 
     ogg_data = request.stream.read()
