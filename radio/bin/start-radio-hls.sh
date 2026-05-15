@@ -7,6 +7,10 @@ KYO_PASS="broadcast"
 
 mkdir -p "$RADIO_DIR" "$ARCHIVE_DIR"
 
+# Supervisor restarts leave the child ffmpeg orphaned, still holding :45860.
+# Kill any stale listener so the new loop can bind the port.
+pkill -f 'ffmpeg .*45860' 2>/dev/null && sleep 2
+
 kyo_live() {
   curl -s -X POST "$KYO_API/radio/live/$1" \
     -H "Content-Type: application/json" \
