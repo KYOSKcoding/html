@@ -23,7 +23,6 @@ class RadioPlayer {
         // Song selector elements (broadcaster only)
         this.songSection = document.getElementById('songSection');
         this.fileList = document.getElementById('fileList');
-        this.importButton = document.getElementById('importButton');
 
         // Progress bar elements
         this.progressBar = document.getElementById('progressBar');
@@ -131,7 +130,6 @@ class RadioPlayer {
         this.authModal.addEventListener('click', (e) => {
             if (e.target === this.authModal) this.closeModal();
         });
-        this.importButton.addEventListener('click', () => this.handleImport());
         this.playPauseButton = document.getElementById('playPauseButton');
         this.volumeSlider = document.getElementById('volumeSlider');
         this.nextButton = document.getElementById('nextButton');
@@ -850,6 +848,43 @@ class RadioPlayer {
                 this.handleSongSwitch(file.filename);
             });
 
+            // Action buttons (rename, delete) — broadcaster only
+            let buttonsDiv = null;
+            if (this.isAuthenticated) {
+                buttonsDiv = document.createElement('div');
+                buttonsDiv.className = 'file-action-buttons';
+
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'file-action-btn rename-btn';
+                renameBtn.title = 'Rename';
+                renameBtn.innerHTML = '✏';
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.startPlaylistRename(li, label, file.filename);
+                });
+                buttonsDiv.appendChild(renameBtn);
+
+                const archiveBtn = document.createElement('button');
+                archiveBtn.className = 'file-action-btn archive-btn';
+                archiveBtn.title = 'Move to archive';
+                archiveBtn.innerHTML = '→';
+                archiveBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.archivePlaylistFile(file.filename);
+                });
+                buttonsDiv.appendChild(archiveBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'file-action-btn delete-btn';
+                deleteBtn.title = 'Delete';
+                deleteBtn.innerHTML = '✕';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deletePlaylistFile(file.filename);
+                });
+                buttonsDiv.appendChild(deleteBtn);
+            }
+
             // Drag handle
             const dragHandle = document.createElement('span');
             dragHandle.className = 'drag-handle';
@@ -863,6 +898,7 @@ class RadioPlayer {
 
             li.appendChild(checkbox);
             li.appendChild(label);
+            if (buttonsDiv) li.appendChild(buttonsDiv);
             li.appendChild(dragHandle);
 
             // Drag event listeners
@@ -1070,6 +1106,80 @@ class RadioPlayer {
         }
     }
 
+    startPlaylistRename(li, label, oldFilename) {
+        if (!this.isAuthenticated) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'rename-input';
+        input.value = oldFilename.replace(/\.mp3$/i, '');
+        input.style.cssText = 'flex:1; background:#111; color:#0f0; border:1px solid #0a0; font-family:monospace; font-size:0.85em; padding:2px 6px;';
+        label.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const commit = async () => {
+            const newBase = input.value.trim();
+            if (!newBase || newBase + '.mp3' === oldFilename) { input.replaceWith(label); return; }
+            const newFilename = newBase + '.mp3';
+            try {
+                const r = await fetch(this.getApiUrl('/api/radio/files/rename'), {
+                    method: 'POST',
+                    headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ old_name: oldFilename, new_name: newFilename, source: 'music' })
+                });
+                if (r.ok) { this.loadSongs(); }
+                else { input.replaceWith(label); const e = await r.json(); alert('Rename failed: ' + (e.error || r.status)); }
+            } catch (e) {
+                input.replaceWith(label);
+                alert('Rename error: ' + e.message);
+            }
+        };
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { input.replaceWith(label); }
+        });
+        input.addEventListener('blur', () => setTimeout(() => { if (document.contains(input)) input.replaceWith(label); }, 200));
+    }
+
+    async deletePlaylistFile(filename) {
+        if (!this.isAuthenticated) return;
+        if (!confirm(`Delete "${filename}" from playlist?`)) return;
+        try {
+            const r = await fetch(this.getApiUrl('/api/radio/files/delete'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ filename, source: 'music' })
+            });
+            if (r.ok) {
+                this.loadSongs();
+            } else {
+                const err = await r.json();
+                alert('Delete failed: ' + (err.error || r.status));
+            }
+        } catch (e) {
+            alert('Delete error: ' + e.message);
+        }
+    }
+
+    async archivePlaylistFile(filename) {
+        if (!this.isAuthenticated) return;
+        try {
+            const r = await fetch(this.getApiUrl('/api/radio/files/move'), {
+                method: 'POST',
+                headers: this.broadcasterHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ filename, source: 'music', dest: 'archive' })
+            });
+            if (r.ok) {
+                this.loadSongs();
+            } else {
+                const err = await r.json();
+                alert('Archive failed: ' + (err.error || r.status));
+            }
+        } catch (e) {
+            alert('Archive error: ' + e.message);
+        }
+    }
+
     async syncFileOrder() {
         try {
             const order = this.files.map(f => f.filename);
@@ -1080,28 +1190,6 @@ class RadioPlayer {
             });
         } catch (e) {
             this.showError(`Failed to sync file order: ${e.message}`);
-        }
-    }
-
-    async handleImport() {
-        // Refresh the file list from disk
-        try {
-            this.importButton.disabled = true;
-            const response = await fetch(this.getApiUrl('/api/radio/files/refresh'), {
-                method: 'POST',
-                headers: this.broadcasterHeaders()
-            });
-            if (response.status === 401) {
-                this.handleSessionExpired('Session expired.');
-                return;
-            }
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            await this.loadSongs();
-        } catch (e) {
-            this.showError(`Failed to refresh files: ${e.message}`);
-        } finally {
-            this.importButton.disabled = false;
         }
     }
 
@@ -1358,6 +1446,26 @@ class ArchivePlayer {
                 const buttonsDiv = document.createElement('div');
                 buttonsDiv.className = 'file-action-buttons';
 
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'file-action-btn rename-btn';
+                renameBtn.title = 'Rename';
+                renameBtn.innerHTML = '✏';
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.startRename(li, span, filename);
+                });
+                buttonsDiv.appendChild(renameBtn);
+
+                const toPlaylistBtn = document.createElement('button');
+                toPlaylistBtn.className = 'file-action-btn approve-btn';
+                toPlaylistBtn.title = 'Add to Playlist';
+                toPlaylistBtn.innerHTML = '↑';
+                toPlaylistBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.moveToPlaylist(filename);
+                });
+                buttonsDiv.appendChild(toPlaylistBtn);
+
                 const hideBtn = document.createElement('button');
                 hideBtn.className = 'file-action-btn hide-btn';
                 hideBtn.title = 'Move to Invisible Archive';
@@ -1367,6 +1475,16 @@ class ArchivePlayer {
                     this.makeInvisible(filename);
                 });
                 buttonsDiv.appendChild(hideBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'file-action-btn delete-btn';
+                deleteBtn.title = 'Delete';
+                deleteBtn.innerHTML = '✕';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteFile(filename);
+                });
+                buttonsDiv.appendChild(deleteBtn);
 
                 li.appendChild(buttonsDiv);
             }
@@ -1493,6 +1611,63 @@ class ArchivePlayer {
             console.error('Move to invisible exception:', e);
         }
     }
+
+    async moveToPlaylist(filename) {
+        if (!(window.radioPlayer && window.radioPlayer.isAuthenticated)) return;
+        try {
+            const token = window.radioPlayer.broadcasterToken || '';
+            const response = await fetch(this.getApiUrl('/api/radio/files/move'), {
+                method: 'POST',
+                headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename, source: 'archive', dest: 'music' })
+            });
+            if (response.ok) {
+                this.scanArchive();
+                window.radioPlayer.loadSongs();
+            } else {
+                const err = await response.json();
+                alert('Failed to add to playlist: ' + (err.error || response.status));
+            }
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+
+    startRename(li, span, oldFilename) {
+        if (!(window.radioPlayer && window.radioPlayer.isAuthenticated)) return;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'rename-input';
+        input.value = oldFilename.replace(/\.mp3$/i, '');
+        input.style.cssText = 'flex:1; background:#111; color:#0f0; border:1px solid #0a0; font-family:monospace; font-size:0.85em; padding:2px 6px;';
+        span.replaceWith(input);
+        input.focus();
+        input.select();
+
+        const commit = async () => {
+            const newBase = input.value.trim();
+            if (!newBase || newBase + '.mp3' === oldFilename) { input.replaceWith(span); return; }
+            const newFilename = newBase + '.mp3';
+            const token = window.radioPlayer.broadcasterToken || '';
+            try {
+                const r = await fetch(this.getApiUrl('/api/radio/files/rename'), {
+                    method: 'POST',
+                    headers: { 'X-Broadcaster-Token': token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_name: oldFilename, new_name: newFilename, source: 'archive' })
+                });
+                if (r.ok) { this.scanArchive(); }
+                else { input.replaceWith(span); const e = await r.json(); alert('Rename failed: ' + (e.error || r.status)); }
+            } catch (e) {
+                input.replaceWith(span);
+                alert('Rename error: ' + e.message);
+            }
+        };
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { input.replaceWith(span); }
+        });
+        input.addEventListener('blur', () => setTimeout(() => { if (document.contains(input)) input.replaceWith(span); }, 200));
+    }
 }
 
 class InvisibleArchiveManager {
@@ -1500,6 +1675,8 @@ class InvisibleArchiveManager {
         this.container = document.getElementById('invisibleArchiveContainer');
         this.fileList = document.getElementById('invisibleFileList');
         this.refreshBtn = document.getElementById('invisibleRefreshBtn');
+        this.importButton = document.getElementById('importButton');
+        this.importFileInput = document.getElementById('importFileInput');
         this.audio = new Audio();
         this.audio.preload = 'none';
         this.files = [];
@@ -1518,6 +1695,12 @@ class InvisibleArchiveManager {
         this.volumeSlider = document.getElementById('invisibleVolume');
 
         this.refreshBtn.addEventListener('click', () => this.loadFiles());
+        if (this.importButton) {
+            this.importButton.addEventListener('click', () => this.handleImportClick());
+        }
+        if (this.importFileInput) {
+            this.importFileInput.addEventListener('change', (e) => this.handleFilesSelected(e));
+        }
         this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         this.prevBtn.addEventListener('click', () => this.prevTrack());
         this.nextBtn.addEventListener('click', () => this.nextTrack());
@@ -1564,6 +1747,60 @@ class InvisibleArchiveManager {
         }
 
         this.container.style.display = 'block';
+        this.loadFiles();
+    }
+
+    handleImportClick() {
+        if (!(window.radioPlayer && window.radioPlayer.isAuthenticated)) {
+            alert('Please log in as broadcaster first.');
+            return;
+        }
+        this.importFileInput.value = '';
+        this.importFileInput.click();
+    }
+
+    async handleFilesSelected(e) {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        if (!(window.radioPlayer && window.radioPlayer.isAuthenticated)) {
+            alert('Please log in as broadcaster first.');
+            return;
+        }
+        const token = window.radioPlayer.broadcasterToken || '';
+        const originalLabel = this.importButton.textContent;
+        this.importButton.disabled = true;
+
+        let uploaded = 0;
+        const errors = [];
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            this.importButton.textContent = `Uploading ${i + 1}/${files.length}…`;
+            const fd = new FormData();
+            fd.append('file', f);
+            fd.append('dest', 'invisible');
+            try {
+                const r = await fetch(this.getApiUrl('/api/radio/files/upload'), {
+                    method: 'POST',
+                    headers: { 'X-Broadcaster-Token': token },
+                    body: fd
+                });
+                const data = await r.json();
+                if (r.ok && data.success) {
+                    uploaded += (data.uploaded || []).length;
+                    (data.errors || []).forEach(er => errors.push(`${er.filename}: ${er.error}`));
+                } else {
+                    errors.push(`${f.name}: ${data.error || r.status}`);
+                }
+            } catch (err) {
+                errors.push(`${f.name}: ${err.message}`);
+            }
+        }
+
+        this.importButton.disabled = false;
+        this.importButton.textContent = originalLabel;
+        if (errors.length) {
+            alert(`Uploaded ${uploaded} file(s).\nErrors:\n${errors.join('\n')}`);
+        }
         this.loadFiles();
     }
 
@@ -1629,7 +1866,7 @@ class InvisibleArchiveManager {
             const visibleBtn = document.createElement('button');
             visibleBtn.className = 'file-action-btn approve-btn';
             visibleBtn.title = 'Make Visible (Move to Public Archive)';
-            visibleBtn.innerHTML = '←';
+            visibleBtn.innerHTML = '↑';
             visibleBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.moveToPublicArchive(filename);

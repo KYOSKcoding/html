@@ -1261,6 +1261,53 @@ def radio_files_rename():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/radio/files/upload", methods=["POST"])
+@app.route("/kyosky/api/radio/files/upload", methods=["POST"])
+def radio_files_upload():
+    """Upload one or more MP3 files — requires valid broadcaster token."""
+    token = request.headers.get("X-Broadcaster-Token", "")
+    if not _validate_broadcaster_token(token):
+        return jsonify({"success": False, "error": "unauthorized"}), 401
+
+    dest = request.form.get("dest", "invisible")
+    paths = {
+        "music": RADIO_DIR,
+        "archive": os.path.join(RADIO_DIR, "archive"),
+        "invisible": os.path.join(RADIO_DIR, "archive", "invisible"),
+    }
+    if dest not in paths:
+        return jsonify({"success": False, "error": "invalid_dest"}), 400
+
+    dest_dir = paths[dest]
+    os.makedirs(dest_dir, exist_ok=True)
+
+    files = request.files.getlist("file")
+    if not files:
+        return jsonify({"success": False, "error": "no_files"}), 400
+
+    uploaded = []
+    errors = []
+    for f in files:
+        raw = f.filename or ""
+        name = os.path.basename(raw)
+        if not name or os.path.basename(name) != name or not name.lower().endswith(".mp3"):
+            errors.append({"filename": raw, "error": "not_mp3_or_invalid_name"})
+            continue
+        target = os.path.join(dest_dir, name)
+        if os.path.exists(target):
+            errors.append({"filename": name, "error": "name_taken"})
+            continue
+        try:
+            f.save(target)
+            uploaded.append(name)
+            logger.info(f"Uploaded file: {dest}/{name}")
+        except Exception as e:
+            logger.error(f"Error uploading {name}: {e}")
+            errors.append({"filename": name, "error": str(e)})
+
+    return jsonify({"success": True, "uploaded": uploaded, "errors": errors})
+
+
 @app.route("/api/radio/song", methods=["POST"])
 @app.route("/kyosky/api/radio/song", methods=["POST"])
 def radio_song_switch():

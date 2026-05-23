@@ -980,3 +980,15 @@ body {
     background: rgba(68, 136, 170, 0.2);
     color: #66bbdd;
 }
+
+.file-action-btn.archive-btn {
+    border-color: #cc9900;
+    background: rgba(204, 153, 0, 0.1);
+    color: #cc9900;
+}
+
+.file-action-btn.archive-btn:hover {
+    border-color: #ffcc00;
+    background: rgba(255, 204, 0, 0.2);
+    color: #ffcc00;
+}
