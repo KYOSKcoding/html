@@ -992,3 +992,19 @@ body {
     background: rgba(255, 204, 0, 0.2);
     color: #ffcc00;
 }
+
+.file-action-btn.download-btn {
+    border-color: #00aaaa;
+    background: rgba(0, 170, 170, 0.1);
+    color: #00aaaa;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.file-action-btn.download-btn:hover {
+    border-color: #00ffff;
+    background: rgba(0, 255, 255, 0.2);
+    color: #00ffff;
+}

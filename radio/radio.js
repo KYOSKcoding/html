@@ -114,6 +114,35 @@ class RadioPlayer {
         return h;
     }
 
+    _makeDownloadAnchor(href, filename) {
+        const a = document.createElement('a');
+        a.className = 'file-action-btn download-btn';
+        a.title = 'Download';
+        a.innerHTML = '⬇';
+        a.href = href;
+        a.download = filename;
+        a.addEventListener('click', e => e.stopPropagation());
+        return a;
+    }
+
+    async _downloadAuthed(url, filename) {
+        try {
+            const r = await fetch(url, { headers: this.broadcasterHeaders() });
+            if (!r.ok) { alert('Download failed: ' + r.status); return; }
+            const blob = await r.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (e) {
+            alert('Download error: ' + e.message);
+        }
+    }
+
     init() {
         this.authButton.addEventListener('click', () => this.handleAuth());
         this.passwordInput.addEventListener('keypress', (e) => {
@@ -864,6 +893,11 @@ class RadioPlayer {
                 });
                 buttonsDiv.appendChild(renameBtn);
 
+                buttonsDiv.appendChild(
+                    this._makeDownloadAnchor(
+                        `/radio/music/${encodeURIComponent(file.filename)}`, file.filename)
+                );
+
                 const archiveBtn = document.createElement('button');
                 archiveBtn.className = 'file-action-btn archive-btn';
                 archiveBtn.title = 'Move to archive';
@@ -1456,6 +1490,11 @@ class ArchivePlayer {
                 });
                 buttonsDiv.appendChild(renameBtn);
 
+                buttonsDiv.appendChild(
+                    window.radioPlayer._makeDownloadAnchor(
+                        `/radio/music/archive/${encodeURIComponent(filename)}`, filename)
+                );
+
                 const toPlaylistBtn = document.createElement('button');
                 toPlaylistBtn.className = 'file-action-btn approve-btn';
                 toPlaylistBtn.title = 'Add to Playlist';
@@ -1862,6 +1901,17 @@ class InvisibleArchiveManager {
                 this.startRename(li, span, filename);
             });
             buttonsDiv.appendChild(renameBtn);
+
+            const dlBtn = document.createElement('button');
+            dlBtn.className = 'file-action-btn download-btn';
+            dlBtn.title = 'Download';
+            dlBtn.innerHTML = '⬇';
+            dlBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                window.radioPlayer._downloadAuthed(
+                    `/radio/music/archive/invisible/${encodeURIComponent(filename)}`, filename);
+            });
+            buttonsDiv.appendChild(dlBtn);
 
             const visibleBtn = document.createElement('button');
             visibleBtn.className = 'file-action-btn approve-btn';
