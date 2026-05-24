@@ -31,7 +31,41 @@ while true; do
   kyo_live stop
   echo "[radio-hls] listening on :45860, will archive to $ARCHIVE"
 
-  ffmpeg \
+  WATCHDOG_PID=""
+
+  # Process substitution (not pipe) so WATCHDOG_PID assignment is visible to
+  # this shell — bash 4.2 runs the last segment of `cmd | while` in a subshell.
+  while IFS= read -r line; do
+    echo "$line"
+    if [[ "$line" == *"Input #0"* ]] && [ -z "$WATCHDOG_PID" ]; then
+      echo "[radio-hls] stream connected — going live"
+      kyo_live start
+
+      # Staleness watchdog: kills ffmpeg if HLS output stops updating for >60s.
+      # Catches the half-open-socket case (broadcaster power-off, no TCP FIN)
+      # where ffmpeg sits forever in a blocking read() on a dead socket.
+      (
+        LAST_FRESH=$(date +%s)
+        while pgrep -f 'ffmpeg .*45860/live/stream' >/dev/null; do
+          sleep 5
+          MTIME=$(stat -c %Y "$RADIO_DIR/index.m3u8" 2>/dev/null)
+          if [ -n "$MTIME" ]; then
+            NOW=$(date +%s)
+            AGE=$((NOW - MTIME))
+            [ "$AGE" -lt 10 ] && LAST_FRESH=$NOW
+          fi
+          if [ "$(( $(date +%s) - LAST_FRESH ))" -gt 60 ]; then
+            echo "[radio-hls] watchdog: HLS stale >60s, killing stuck ffmpeg"
+            pkill -TERM -f 'ffmpeg .*45860/live/stream'
+            sleep 3
+            pkill -KILL -f 'ffmpeg .*45860/live/stream' 2>/dev/null
+            break
+          fi
+        done
+      ) &
+      WATCHDOG_PID=$!
+    fi
+  done < <(ffmpeg \
     -listen 1 -i rtmp://[::]:45860/live/stream \
     -map 0:a -c:a libmp3lame -b:a 128k \
     -f hls \
@@ -41,14 +75,14 @@ while true; do
     -hls_segment_filename "$RADIO_DIR/seg%03d.ts" \
     "$RADIO_DIR/index.m3u8" \
     -map 0:a -c:a libmp3lame -b:a 128k \
-    "$ARCHIVE" 2>&1 | \
-  while IFS= read -r line; do
-    echo "$line"
-    if [[ "$line" == *"Input #0"* ]]; then
-      echo "[radio-hls] stream connected — going live"
-      kyo_live start
-    fi
-  done
+    "$ARCHIVE" 2>&1)
+
+  # ffmpeg has exited (clean end, error, or killed by watchdog).
+  # Reap the watchdog if it's still alive.
+  if [ -n "$WATCHDOG_PID" ]; then
+    kill "$WATCHDOG_PID" 2>/dev/null
+    wait "$WATCHDOG_PID" 2>/dev/null
+  fi
 
   kyo_live stop
   echo "[radio-hls] stream ended, restarting listener..."
