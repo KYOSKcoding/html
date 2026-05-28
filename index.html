@@ -202,6 +202,260 @@
       color: limegreen;
       mix-blend-mode: normal;
     }
+
+    .jam-flyer {
+      width: 100%;
+      max-width: 420px;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      border: 2px solid #00ff00;
+      border-radius: 12px;
+      padding: 1.6rem 1.4rem;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .jam-flyer h2 {
+      margin: 0 0 1rem 0;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px #00ff00;
+      font-weight: bold;
+    }
+
+    .jam-live-dot {
+      width: 110px;
+      height: 110px;
+      margin: 0.6rem auto 1rem;
+      border-radius: 50%;
+      border: 3px solid #ff4444;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 68, 68, 0.5), rgba(0, 0, 0, 0.9));
+      box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
+      color: #ff4444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.4rem;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px #ff4444, 0 0 20px #ff0000;
+      animation: jam-live-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes jam-live-pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
+      }
+
+      50% {
+        box-shadow: 0 0 45px rgba(255, 68, 68, 1), inset 0 0 25px rgba(255, 68, 68, 0.6);
+      }
+    }
+
+    .jam-date {
+      font-size: 1.4rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin: 0.4rem 0 0.2rem;
+      text-shadow: 0 0 6px #00ff00;
+    }
+
+    .jam-sub {
+      font-size: 0.95rem;
+      color: #00aa00;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+
+    .jam-url {
+      margin-bottom: 1.1rem;
+    }
+
+    .jam-url a {
+      color: #00ff00;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border-bottom: 1px dotted #00ff00;
+      letter-spacing: 1px;
+      text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
+    }
+
+    .jam-url a:hover {
+      color: #ffffff;
+      border-bottom-color: #ffffff;
+      text-shadow: 0 0 8px #00ff00;
+    }
+
+    .jam-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 0.6rem 0 1rem;
+      flex-wrap: wrap;
+    }
+
+    .jam-btn {
+      padding: 10px 18px;
+      border: 2px solid #00ff00;
+      background: rgba(0, 255, 0, 0.1);
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      font-size: 0.95rem;
+      font-weight: bold;
+      border-radius: 4px;
+      letter-spacing: 2px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .jam-btn:hover {
+      background: rgba(0, 255, 0, 0.25);
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+      color: #00ff00;
+    }
+
+    .jam-btn.jam-btn-live {
+      border-color: #ff4444;
+      background: rgba(255, 68, 68, 0.12);
+      color: #ff4444;
+    }
+
+    .jam-btn.jam-btn-live:hover {
+      background: rgba(255, 68, 68, 0.25);
+      box-shadow: 0 0 15px rgba(255, 68, 68, 0.6);
+      color: #ff4444;
+    }
+
+    .jam-player {
+      border: 1px dotted #00ff00;
+      border-radius: 4px;
+      padding: 0.7rem 0.6rem 0.5rem;
+      margin-top: 0.6rem;
+      background: rgba(0, 50, 0, 0.3);
+    }
+
+    .jam-waveform {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 44px;
+      gap: 2px;
+      margin-bottom: 6px;
+    }
+
+    .jam-waveform span {
+      flex: 1;
+      background: linear-gradient(to top, #006600, #00ff00);
+      box-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
+      border-radius: 1px;
+      min-width: 2px;
+      animation: jam-bar 1.4s ease-in-out infinite;
+    }
+
+    @keyframes jam-bar {
+
+      0%,
+      100% {
+        transform: scaleY(1);
+      }
+
+      50% {
+        transform: scaleY(0.35);
+      }
+    }
+
+    .jam-progress {
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 255, 0, 0.1);
+      border: 1px solid #00ff00;
+      border-radius: 3px;
+      position: relative;
+      margin: 6px 0 4px;
+    }
+
+    .jam-progress::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: -5px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #00ff00;
+      box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+    }
+
+    .jam-time {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #00aa00;
+      letter-spacing: 1px;
+    }
+
+    .jam-ascii {
+      margin: 1rem 0 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.6rem;
+      line-height: 1;
+      color: rgba(0, 255, 0, 0.55);
+      white-space: pre;
+      overflow: hidden;
+      text-align: left;
+    }
+
+    @media screen and (max-width: 600px) {
+      .jam-flyer {
+        max-width: 100%;
+      }
+
+      .jam-flyer h2 {
+        font-size: 4rem;
+      }
+
+      .jam-date {
+        font-size: 3.4rem;
+      }
+
+      .jam-sub {
+        font-size: 2.2rem;
+      }
+
+      .jam-url a {
+        font-size: 2rem;
+      }
+
+      .jam-live-dot {
+        width: 200px;
+        height: 200px;
+        font-size: 3rem;
+      }
+
+      .jam-btn {
+        font-size: 2rem;
+        padding: 18px 28px;
+      }
+
+      .jam-waveform {
+        height: 80px;
+      }
+
+      .jam-ascii {
+        font-size: 1.4rem;
+      }
+
+      .jam-time {
+        font-size: 1.8rem;
+      }
+    }
   </style>
 </head>
 
@@ -265,6 +519,58 @@
     </article>
     <article><img src="kycad-512-2.gif" alt="Kyosk 2077"
         style="mix-blend-mode: normal; max-width: 800px;">
+    </article>
+
+    <article class="jam-flyer">
+      <h2>Open-Mic Jam session<br>im Kyosk!!</h2>
+      <div class="jam-live-dot">LIVE</div>
+      <div class="jam-date">4.6. // 18&ndash;22h</div>
+      <div class="jam-sub">Ky-Radio Release</div>
+      <div class="jam-url"><a href="https://kyo.sk/radio/">https://kyo.sk/radio/</a></div>
+      <div class="jam-buttons">
+        <a class="jam-btn" href="https://kyo.sk/radio/">&#9654; LISTEN</a>
+        <a class="jam-btn jam-btn-live" href="https://kyo.sk/radio/">&#9679; JAMMEN</a>
+      </div>
+      <div class="jam-player">
+        <div class="jam-waveform" aria-hidden="true">
+          <span style="height:18%;animation-delay:0s"></span>
+          <span style="height:34%;animation-delay:.05s"></span>
+          <span style="height:55%;animation-delay:.1s"></span>
+          <span style="height:78%;animation-delay:.15s"></span>
+          <span style="height:92%;animation-delay:.2s"></span>
+          <span style="height:70%;animation-delay:.25s"></span>
+          <span style="height:48%;animation-delay:.3s"></span>
+          <span style="height:30%;animation-delay:.35s"></span>
+          <span style="height:42%;animation-delay:.4s"></span>
+          <span style="height:65%;animation-delay:.45s"></span>
+          <span style="height:88%;animation-delay:.5s"></span>
+          <span style="height:96%;animation-delay:.55s"></span>
+          <span style="height:74%;animation-delay:.6s"></span>
+          <span style="height:50%;animation-delay:.65s"></span>
+          <span style="height:38%;animation-delay:.7s"></span>
+          <span style="height:60%;animation-delay:.75s"></span>
+          <span style="height:82%;animation-delay:.8s"></span>
+          <span style="height:68%;animation-delay:.85s"></span>
+          <span style="height:44%;animation-delay:.9s"></span>
+          <span style="height:26%;animation-delay:.95s"></span>
+          <span style="height:36%;animation-delay:1s"></span>
+          <span style="height:58%;animation-delay:1.05s"></span>
+          <span style="height:80%;animation-delay:1.1s"></span>
+          <span style="height:62%;animation-delay:1.15s"></span>
+          <span style="height:40%;animation-delay:1.2s"></span>
+          <span style="height:24%;animation-delay:1.25s"></span>
+          <span style="height:32%;animation-delay:1.3s"></span>
+          <span style="height:54%;animation-delay:1.35s"></span>
+        </div>
+        <div class="jam-progress" aria-hidden="true"></div>
+        <div class="jam-time"><span>00:00</span><span>&infin; LIVE</span></div>
+      </div>
+      <pre class="jam-ascii" aria-hidden="true">
+ ___        ___       ___       ___       ___       ___
+|MIC|--o---|AMP|=====|DRM|=====|BAS|=====|KEY|=====|=:=|
+|___|  |   |___|     |___|     |___|     |___|     |___|
+  |    |    | |       | |       | |       | |       | |
+ cbl  cbl  cbl-+----cbl-+----cbl-+----cbl-+----cbl-+--&gt;((o)) kyo.sk/radio</pre>
     </article>
 
     </article>
