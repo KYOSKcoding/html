@@ -175,11 +175,35 @@
       .headline small {
         font-size: 6rem;
       }
+
+      .top-row {
+        flex-direction: column;
+      }
+
+      .button-container {
+        margin: 1rem 0 0 0;
+      }
+
+      button {
+        font-size: 2rem;
+      }
+    }
+
+    /* Header row: headline + nav buttons */
+    .top-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
     }
 
     /* Button Styling */
     .button-container {
-      margin-top: 20px;
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 8px;
+      margin: 0 0 0 auto;
     }
 
     button {
@@ -190,7 +214,7 @@
       font-size: 0.8em;
       font-family: 'TerminalGrotesqueOpenRegular', monospace !important;
       cursor: pointer;
-      margin: 5px;
+      margin: 0;
     }
 
     button:hover {
@@ -460,30 +484,31 @@
 </head>
 
 <body>
-  <div class="button-container">
-    <button onclick="window.location.href='/awareness/';">
-      <span class="button-text">🌿 Awareness</span>
-    </button>
-    <button onclick="window.location.href='/ky-basics/';">
-      <span class="button-text">📋 Ky-Basics</span>
-    </button>
-    <button onclick="window.location.href='/radio/';">
-      <span class="button-text">&#127925; Ky-Radio </span>
-    </button>
-    <button onclick="window.location.href='/kyosky/';" class="weather-button">
-      <img src="kyosky_logo_vektorisiert_black.svg" alt="kyo.sk logo" class="button-logo">
-    </button>
-  </div>
-
   <h1 id=nl>
     <script src="https://webneko.net/n20171213.js"></script><a href="https://webneko.net">Neko</a>
   </h1>
   <!-- containers for use in effects.css -->
   <div class="bg"></div>
   <div class="bg2"></div>
-  <div class="headline">
-    hi, it’s
-    <img src="kyo_dot_sk_logo_vektorisiert_black.svg" alt="kyo.sk" class="headline-logo">
+  <div class="top-row">
+    <div class="headline">
+      hi, it’s
+      <img src="kyo_dot_sk_logo_vektorisiert_black.svg" alt="kyo.sk" class="headline-logo">
+    </div>
+    <div class="button-container">
+      <button onclick="window.location.href='/awareness/';">
+        <span class="button-text">🌿 Awareness</span>
+      </button>
+      <button onclick="window.location.href='/ky-basics/';">
+        <span class="button-text">📋 Ky-Basics</span>
+      </button>
+      <button onclick="window.location.href='/radio/';">
+        <span class="button-text">&#127925; Ky-Radio </span>
+      </button>
+      <button onclick="window.location.href='/kyosky/';" class="weather-button">
+        <img src="kyosky_logo_vektorisiert_black.svg" alt="kyo.sk logo" class="button-logo">
+      </button>
+    </div>
   </div>
   <div class="flexhex">
     <article>
