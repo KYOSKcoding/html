@@ -1170,7 +1170,12 @@ def radio_files_delete():
 @app.route("/api/radio/files/move", methods=["POST"])
 @app.route("/kyosky/api/radio/files/move", methods=["POST"])
 def radio_files_move():
-    """Move file between music, archive, and invisible — requires valid broadcaster token."""
+    """Move file between music, archive, and invisible — requires valid broadcaster token.
+
+    Archive → music is a copy instead of a move: the file stays in the
+    archive and a copy is added to the broadcast playlist. Every other
+    direction (including moving it back out to the archive) is a real
+    move, which overwrites whatever's already at the destination."""
     token = request.headers.get("X-Broadcaster-Token", "")
     if not _validate_broadcaster_token(token):
         return jsonify({"success": False, "error": "unauthorized"}), 401
@@ -1203,10 +1208,13 @@ def radio_files_move():
         # Ensure dest directory exists
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
-        # Move file
         import shutil
-        shutil.move(src_path, dest_path)
-        logger.info(f"Moved file: {source}/{filename} → {dest}/{filename}")
+        if source == "archive" and dest == "music":
+            shutil.copy2(src_path, dest_path)
+            logger.info(f"Copied file: {source}/{filename} → {dest}/{filename}")
+        else:
+            shutil.move(src_path, dest_path)
+            logger.info(f"Moved file: {source}/{filename} → {dest}/{filename}")
         return jsonify({"success": True, "source": source, "dest": dest})
     except Exception as e:
         logger.error(f"Error moving file: {e}")
