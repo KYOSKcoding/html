@@ -363,6 +363,9 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
     output_dir = Path("radar_png")
     output_dir.mkdir(exist_ok=True, parents=True)
     output_mp4 = output_dir / "radar_forecast.mp4"
+    # Render to a temp file and move it into place at the end, so the web page never
+    # serves a half-written video during the ~2 minutes a run takes.
+    tmp_mp4 = output_dir / "radar_forecast.tmp.mp4"  # keep .mp4 so imageio picks the ffmpeg backend
     max_radius = 500
     now = datetime.now(timezone.utc)
 
@@ -575,7 +578,7 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
                         target_size = img.shape[:2]
                         log.info(f"Video frame size: {target_size}")
                         writer = imageio.get_writer(
-                            output_mp4, fps=1.5, codec="libx264", quality=8
+                            tmp_mp4, fps=1.5, codec="libx264", quality=8
                         )
 
                     # Ensure RGB
@@ -619,7 +622,10 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
 
     if writer is None:
         log.error("No frames were successfully processed")
+        tmp_mp4.unlink(missing_ok=True)
         return False
+
+    tmp_mp4.replace(output_mp4)
 
     log.info(f"✓ Video saved: {output_mp4}")
     log.info(
