@@ -1,5 +1,6 @@
 import argparse
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -78,6 +79,39 @@ def radolan_lonlat_grid(nx=None, ny=None):
         _grid_cache[key] = (lon, lat)
 
     return _grid_cache[key]
+
+
+def lonlat_grid_for(ds):
+    """Build the lon/lat grid from a dataset's own projection coordinates.
+
+    RADOLAN RW comes on the 900x900 grid, but the RV nowcast uses DWD's larger
+    DE1200 grid (1200x1100, different origin), so the grid cannot be hardcoded.
+    The x/y coordinates are in km.
+    """
+    x_km = ds["x"].values
+    y_km = ds["y"].values
+    key = (len(x_km), len(y_km), round(float(x_km[0]), 3), round(float(y_km[0]), 3))
+
+    if key not in _grid_cache:
+        xx, yy = np.meshgrid(x_km * PIXEL_SIZE, y_km * PIXEL_SIZE)
+        _grid_cache[key] = transformer.transform(xx, yy)
+
+    return _grid_cache[key]
+
+
+def forecast_lead_minutes(item):
+    """Lead time of a RADVOR file in minutes, read from its name (..._030)."""
+    name = getattr(item, "filename", None) or str(getattr(item, "url", "") or "")
+    match = re.search(r"_(\d{3})(?:\D|$)", name)
+    return int(match.group(1)) if match else None
+
+
+def pick_lead(items, lead):
+    """The file for one lead time out of a single forecast cycle."""
+    for item in items:
+        if forecast_lead_minutes(item) == lead:
+            return item
+    return None
 
 
 def normalize_timestamp(item, ds=None):
@@ -433,23 +467,25 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
     except Exception as e:
         log.warning(f"RQ_REFLECTIVITY failed: {e}")
 
-    # DWD often simply publishes no RQ file instead of erroring out, so fall back
-    # to RE_REFLECTIVITY on an empty result too, not only on an exception.
+    # DWD no longer publishes RQ - the query just comes back empty rather than
+    # erroring - so fall back to RV, its replacement. Not RE: that one still
+    # exists but delivers an all-zero field, which renders as a frozen, rainless
+    # forecast.
     if not forecast_items:
-        log.info("Trying RE_REFLECTIVITY...")
+        log.info("Trying RV_REFLECTIVITY...")
         try:
             radvor = DwdRadarValues(
-                parameter=DwdRadarParameter.RE_REFLECTIVITY,
+                parameter=DwdRadarParameter.RV_REFLECTIVITY,
                 start_date=forecast_start_str,
                 end_date=forecast_end_str,
             )
             forecast_items = sorted(radvor.query(), key=lambda i: i.timestamp)
             if forecast_items:
-                log.info(f"✓ Found {len(forecast_items)} RE_REFLECTIVITY timesteps")
+                log.info(f"✓ Found {len(forecast_items)} RV_REFLECTIVITY timesteps")
             else:
-                log.warning("RE_REFLECTIVITY query returned no results")
+                log.warning("RV_REFLECTIVITY query returned no results")
         except Exception as e2:
-            log.warning(f"RE_REFLECTIVITY also failed: {e2}")
+            log.warning(f"RV_REFLECTIVITY also failed: {e2}")
 
     if forecast_items:
         log.info(f"Found {len(forecast_items)} RADVOR timesteps")
@@ -472,7 +508,7 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
         for base_time, items in older_cycles:
             radvor_frames.append(
                 {
-                    "item": items[0],
+                    "item": pick_lead(items, 0) or items[0],
                     "is_forecast": True,
                     "timestamp": base_time,
                     "lead_minutes": 0,
@@ -482,7 +518,14 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
         latest_base, latest_items = latest_cycle
         LEAD_MINUTES = [0, 30, 60]
 
-        for item, lead in zip(latest_items, LEAD_MINUTES):
+        # A cycle holds one file per 5-minute lead time, so the file for T+30 has to
+        # be looked up by its lead: taking the first three files of the cycle would
+        # label T+5 and T+10 as T+30 and T+60 and the forecast would barely move.
+        for lead in LEAD_MINUTES:
+            item = pick_lead(latest_items, lead)
+            if item is None:
+                log.warning(f"No forecast file for T+{lead}min in cycle {latest_base}")
+                continue
             radvor_frames.append(
                 {
                     "item": item,
@@ -515,10 +558,6 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
 
     log.info(f"Total frames to generate: {len(all_items)}")
 
-    # Pre-compute grid once (huge speedup!)
-    log.info("Pre-computing coordinate grid...")
-    grid_lon, grid_lat = radolan_lonlat_grid()
-
     # Open video writer
     log.info("=" * 60)
     log.info("Rendering frames directly to video...")
@@ -544,6 +583,8 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
                 product = next(iter(ds.data_vars))
                 da = ds[product].astype("float32")
                 timestamp_utc = normalize_timestamp(item, ds)
+
+                grid_lon, grid_lat = lonlat_grid_for(ds)
 
                 da_masked, radius = find_rain_within_radius(
                     da, grid_lon, grid_lat, lon, lat, radius0, max_radius
