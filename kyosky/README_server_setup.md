@@ -75,13 +75,30 @@ make install
 # Verify installation
 ~/python312/bin/python3 --version
 ~/python312/bin/python3 -c "import ssl; print(ssl.OPENSSL_VERSION)"
+~/python312/bin/python3 -c "import sqlite3; print(sqlite3.sqlite_version)"
 ```
 
 **Expected output:**
 ```
 Python 3.12.0
 OpenSSL 1.1.1w
+3.53.4
 ```
+
+**If `import sqlite3` fails** with `No module named '_sqlite3'`, this build was made
+without the SQLite headers. `wetterdienst` needs it (`diskcache` backs its directory
+listing cache), so the radar script fails with `No module named '_sqlite3'`.
+The host ships a stock CPython 3.12 with the module compiled in, and extension
+modules are ABI-compatible across 3.12.x, so copy it in:
+
+```bash
+cp /usr/lib64/python3.12/lib-dynload/_sqlite3.cpython-312-x86_64-linux-gnu.so \
+   ~/python312/lib/python3.12/lib-dynload/
+```
+
+Rebuilding `~/python312` drops this file — copy it again afterwards. (The stock
+`/usr/bin/python3.12` has both SSL and SQLite; a future venv could just use it and
+make the custom build unnecessary.)
 
 ---
 
@@ -154,7 +171,11 @@ pip install --only-binary=:all: numpy==1.26.4 pandas==2.2.2
 pip install --only-binary=:all: pyproj==3.6.1 shapely==2.0.3 cartopy==0.23.0
 
 # 3. Polars (explicit wheel)
-pip install --only-binary=:all: "polars-lts-cpu==1.15.0"
+# The CPU here (Xeon E5-2630L v2) has no avx2/fma/bmi, so the default polars runtime
+# aborts with SIGILL (subprocess return code -4) on `import polars`.
+# Do NOT use polars-lts-cpu: pip does not accept it as satisfying wetterdienst's
+# `polars` dependency, so plain polars is installed over it and the radar breaks.
+pip install --only-binary=:all: "polars[rtcompat]==1.40.1"
 
 # 4. Everything else
 pip install --only-binary=:all: -r requirements.txt
@@ -453,6 +474,38 @@ pip install -r requirements.txt
 chmod +x ~/bin/start-kyosky.sh
 chmod -R 755 ~/html/kyosky
 ```
+
+---
+
+### Issue: Radar / prediction shows "JSON.parse: unexpected character" in the browser
+
+The app returns a JSON body on failure, but Uberspace's frontend replaces any 5xx
+response with its own HTML error page, so `response.json()` chokes on the leading `<`
+and the real reason is hidden. Let the application's own error responses through:
+
+```bash
+uberspace web errorpage 500 disable
+uberspace web errorpage 500 status
+```
+
+To see what the backend really answered, bypass the proxy:
+
+```bash
+curl -s -X POST http://0.0.0.0:5001/radar -H "Content-Type: application/json" -d '{}'
+```
+
+---
+
+### Issue: Radar video never updates
+
+The scheduler in `app.py` runs the radar every 10 minutes and logs the outcome. Check:
+
+```bash
+grep -a "Scheduler radar run\|Radar script returned code" ~/logs/supervisord-flask-kyosky-error.log | tail
+```
+
+A `returned code: -4` means the subprocess was killed by SIGILL — that is the polars
+CPU problem described in the install section above.
 
 ---
 

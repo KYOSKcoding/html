@@ -362,6 +362,25 @@
             runPrediction();
         });
 
+        // A failing request does not always come back as JSON: a proxy in front of the
+        // app may answer with its own HTML error page. Read the body as text first so
+        // the real message shows up instead of a JSON parse error.
+        async function readJsonResponse(response, fallbackMessage) {
+            const body = await response.text();
+            let data;
+            try {
+                data = JSON.parse(body);
+            } catch (e) {
+                throw new Error(`HTTP ${response.status} - ${body.trim().slice(0, 200) || fallbackMessage}`);
+            }
+            if (!response.ok) {
+                // `details` carries the script's stderr, which is what actually names the failure
+                const detail = (data.details || '').trim().split('\n').filter(Boolean).slice(0, 3).join(' | ');
+                throw new Error([data.error || fallbackMessage, detail.slice(0, 300)].filter(Boolean).join(' - '));
+            }
+            return data;
+        }
+
         function getFormData() {
             const formData = {};
             const loc = document.getElementById('location').value;
@@ -478,11 +497,7 @@
                     body: JSON.stringify(formData)
                 });
 
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Prediction failed');
-                }
+                const data = await readJsonResponse(response, 'Prediction failed');
 
                 output.innerHTML = data.html;
 
@@ -522,11 +537,7 @@
                     body: JSON.stringify(formData)
                 });
 
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Radar generation failed');
-                }
+                await readJsonResponse(response, 'Radar generation failed');
 
                 // Reload the video with cache bust
                 radarOutput.innerHTML = `

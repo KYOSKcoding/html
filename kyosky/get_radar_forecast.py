@@ -429,6 +429,10 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
             log.warning("RQ_REFLECTIVITY query returned no results")
     except Exception as e:
         log.warning(f"RQ_REFLECTIVITY failed: {e}")
+
+    # DWD often simply publishes no RQ file instead of erroring out, so fall back
+    # to RE_REFLECTIVITY on an empty result too, not only on an exception.
+    if not forecast_items:
         log.info("Trying RE_REFLECTIVITY...")
         try:
             radvor = DwdRadarValues(
@@ -443,9 +447,11 @@ def radar_with_forecast_to_video(lat, lon, radius0, name):
                 log.warning("RE_REFLECTIVITY query returned no results")
         except Exception as e2:
             log.warning(f"RE_REFLECTIVITY also failed: {e2}")
-        log.warning("No RADVOR forecast data found")
-    else:
+
+    if forecast_items:
         log.info(f"Found {len(forecast_items)} RADVOR timesteps")
+    else:
+        log.warning("No RADVOR forecast data found")
 
     from collections import defaultdict
 
