@@ -9,6 +9,10 @@ events_table.html
 **/*.html
 **/*.mp4
 
+# secrets
+.env
+**/.env
+
 # runtime / cache files
 *.pyc
 kyosky/radar_png/radar_forecast.mp4
