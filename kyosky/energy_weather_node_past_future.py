@@ -18,11 +18,6 @@ from pvlib.pvsystem import PVSystem
 import openmeteo_requests
 import requests_cache
 from retry_requests import retry
-from dotenv import load_dotenv
-import os
-
-
-load_dotenv()
 
 
 logging.getLogger().setLevel(logging.DEBUG)
