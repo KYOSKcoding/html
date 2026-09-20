@@ -1413,6 +1413,17 @@ def radar():
         # If script failed, return details
         if result.returncode != 0:
             logger.error("Radar script execution failed")
+            if result.returncode == -9:
+                # SIGKILL: the 1.5 GiB account limit, usually a smaller radius helps
+                return (
+                    jsonify(
+                        {
+                            "error": "Radar run ran out of memory - try a smaller radius",
+                            "details": result.stderr[-2000:],
+                        }
+                    ),
+                    500,
+                )
             return (
                 jsonify(
                     {
@@ -1449,6 +1460,16 @@ def radar():
                 500,
             )
 
+    except RadarBusy:
+        logger.info("Radar request rejected: another run is already in progress")
+        return (
+            jsonify(
+                {
+                    "error": "A radar run is already in progress - try again in a minute"
+                }
+            ),
+            409,
+        )
     except subprocess.TimeoutExpired:
         logger.error("Radar script execution timeout")
         return jsonify({"error": "Radar script execution timeout"}), 500
@@ -1546,22 +1567,49 @@ def run_prediction_script(data=None, timeout=300):
     return result
 
 
-def run_radar_script(data=None, timeout=300):
+class RadarBusy(Exception):
+    """Raised when another radar run holds the lock."""
+
+
+# A radar run peaks around 760 MB and the whole account is capped at 1.5 GiB, so two
+# of them at once get one killed by the OOM killer (subprocess return code -9). The
+# scheduler fires every 10 minutes, which is easy to collide with from the button.
+RADAR_LOCK = threading.Lock()
+
+
+def run_radar_script(data=None, timeout=300, lock_timeout=0):
     """Execute the radar script with the given data dict (or defaults when None).
+
+    Only one run happens at a time. `lock_timeout` is how long to wait for a run in
+    progress; the default 0 gives up immediately, which is what the HTTP route wants:
+    a run takes ~2 minutes and nginx in front of us times out at 180 s, so a request
+    that queues behind another run can only ever end in a 504. Raises RadarBusy when
+    the lock is not free in time.
 
     Returns the subprocess.CompletedProcess instance.
     """
-    work_dir = os.path.dirname(__file__)
-    cmd = _build_radar_cmd_from_data(data)
-
-    logger.info(f"Executing radar command: {' '.join(cmd)}")
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        cwd=work_dir,
+    acquired = (
+        RADAR_LOCK.acquire(timeout=lock_timeout)
+        if lock_timeout
+        else RADAR_LOCK.acquire(blocking=False)
     )
+    if not acquired:
+        raise RadarBusy("another radar run is already in progress")
+
+    try:
+        work_dir = os.path.dirname(__file__)
+        cmd = _build_radar_cmd_from_data(data)
+
+        logger.info(f"Executing radar command: {' '.join(cmd)}")
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=work_dir,
+        )
+    finally:
+        RADAR_LOCK.release()
 
     logger.info(f"Radar script returned code: {result.returncode}")
     if result.stdout:
@@ -1681,6 +1729,8 @@ def _scheduler_loop(interval_minutes=10):
                     logger.info("Scheduler prediction run completed successfully")
                 prediction_counter = 0
 
+        except RadarBusy:
+            logger.info("Scheduler: radar run skipped, a manual run is in progress")
         except Exception as e:
             logger.exception("Scheduler exception: %s", e)
 

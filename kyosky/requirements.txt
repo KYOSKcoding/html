@@ -26,6 +26,8 @@ retry-requests==2.0.0
 # Templates / utils
 # ======================
 jinja2==3.1.4
+# Not imported by our code, but pydantic-settings (via wetterdienst) hard-requires it
+python-dotenv==1.0.1
 
 # ======================
 # Weather / energy

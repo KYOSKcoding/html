@@ -496,6 +496,29 @@ curl -s -X POST http://0.0.0.0:5001/radar -H "Content-Type: application/json" -d
 
 ---
 
+### Issue: [GENERATE RADAR] returns 504 after three minutes
+
+nginx in front of the app gives up at 180 s. A radar run takes roughly 100-120 s, so
+it normally fits, but a slow DWD response can push it over. The run itself is not
+cancelled - it finishes and the video does update, the browser just never sees the
+reply. Reload the page after a minute to see the new video.
+
+For the same reason a radar request that has to wait for another run in progress
+would always end in a 504, so `run_radar_script` does not queue: it answers 409
+("a radar run is already in progress") straight away.
+
+---
+
+### Issue: Radar run killed with return code -9
+
+That is SIGKILL from the kernel. The account is capped at 1.5 GiB
+(`/sys/fs/cgroup/memory/user.slice/user-$(id -u).slice/memory.limit_in_bytes`) and a
+single radar render peaks around 760 MB, so two at once do not fit. The scheduler and
+the button now share `RADAR_LOCK` in `app.py` to prevent that; if it happens anyway,
+use a smaller radius.
+
+---
+
 ### Issue: Radar video never updates
 
 The scheduler in `app.py` runs the radar every 10 minutes and logs the outcome. Check:
