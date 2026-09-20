@@ -14,6 +14,7 @@ events_table.html
 **/.env
 
 # runtime / cache files
+kyosky/.cache.sqlite
 *.pyc
 kyosky/radar_png/radar_forecast.mp4
 kyosky/energy_weather_node_past_future_mstat.py
