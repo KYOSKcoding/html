@@ -22,6 +22,34 @@ from retry_requests import retry
 
 logging.getLogger().setLevel(logging.DEBUG)
 
+# Timezone of the site this runs for. Used for everything that is calculated or plotted.
+LOCAL_TZ = "Europe/Berlin"
+
+
+def to_local_time(values):
+    """Return timestamps as naive wall-clock time in LOCAL_TZ, ready for plotting.
+
+    Plotly.js has no timezone support: it plots the clock time it is handed and ignores any
+    UTC offset that came with it. The data arrives in a mix of zones - Open-Meteo answers in
+    UTC, while the PV and wind power calculations run in local time - so without converting
+    them to one zone the weather curves sit an hour (two in summer) beside the power curves
+    and the red NOW line. Naive input is returned unchanged: it has no zone to convert from.
+    """
+    if isinstance(values, pd.Series):
+        if values.dt.tz is None:
+            return values
+        return values.dt.tz_convert(LOCAL_TZ).dt.tz_localize(None)
+    if isinstance(values, pd.DatetimeIndex):
+        if values.tz is None:
+            return values
+        return values.tz_convert(LOCAL_TZ).tz_localize(None)
+    if isinstance(values, (list, tuple)):
+        return [to_local_time(value) for value in values]
+    value = pd.Timestamp(values)
+    if value.tzinfo is None:
+        return value
+    return value.tz_convert(LOCAL_TZ).tz_localize(None)
+
 
 def save_plots(merged_fig):
     plot_html = merged_fig.to_html(
@@ -241,10 +269,10 @@ def create_df_weather(dates, wind_10m, temp2m, surf_pres, roughnesslength):
         df_weather.index = (
             pd.to_datetime(df_weather.index)
             .tz_localize("UTC")
-            .tz_convert("Europe/Berlin")
+            .tz_convert(LOCAL_TZ)
         )
     else:
-        df_weather.index = pd.to_datetime(df_weather.index).tz_convert("Europe/Berlin")
+        df_weather.index = pd.to_datetime(df_weather.index).tz_convert(LOCAL_TZ)
 
     return df_weather
 
@@ -635,8 +663,25 @@ def create_merged_plot(
         clouds_high,
     ) = forecast_data
 
+    # Put every series on the same clock before anything is compared or plotted: the weather
+    # comes back from Open-Meteo in UTC, the PV and wind power series are calculated in local
+    # time, and Plotly.js would plot each of them at its own face value. See to_local_time().
+    timestamps = to_local_time(timestamps)
+    if data_hourly_dwd is not None and not data_hourly_dwd.empty:
+        data_hourly_dwd = data_hourly_dwd.set_axis(to_local_time(data_hourly_dwd.index))
+    if power_future_plt is not None and not power_future_plt.empty:
+        power_future_plt = power_future_plt.set_axis(to_local_time(power_future_plt.index))
+    if df_pv_past_processed is not None:
+        df_pv_past_processed = df_pv_past_processed.assign(
+            datetime=to_local_time(df_pv_past_processed["datetime"])
+        )
+    if df_pv_forecast_processed is not None:
+        df_pv_forecast_processed = df_pv_forecast_processed.assign(
+            datetime=to_local_time(df_pv_forecast_processed["datetime"])
+        )
+
     # Get the transition point (current time or first forecast timestamp)
-    transition_time = datetime.now().astimezone()
+    transition_time = to_local_time(datetime.now().astimezone())
     # remove data from df_pv_forecast_processed which is before transition_time
     if df_pv_forecast_processed is not None:
         df_pv_forecast_processed = df_pv_forecast_processed[
@@ -1404,7 +1449,7 @@ def main():
 
             df_pv_past_processed["datetime"] = df_pv_past_processed[
                 "datetime"
-            ].dt.tz_convert("Europe/Berlin")
+            ].dt.tz_convert(LOCAL_TZ)
 
             # Filter to requested date range
             df_pv_past_processed = df_pv_past_processed[
@@ -1456,7 +1501,7 @@ def main():
 
             df_pv_forecast_processed["datetime"] = df_pv_forecast_processed[
                 "datetime"
-            ].dt.tz_convert("Europe/Berlin")
+            ].dt.tz_convert(LOCAL_TZ)
 
             # Filter forecast to only show future dates
             future_start = datetime.combine(today.date(), datetime.min.time()).replace(
