@@ -171,6 +171,16 @@
             background-color: rgba(0, 0, 0, 0.8);
         }
 
+        /* Only shown on phones, where the plot gets a fixed width and scrolls sideways */
+        .plot-swipe-hint {
+            display: none;
+            text-align: center;
+            color: #00ff0088;
+            font-size: 0.9em;
+            margin-top: -20px;
+            margin-bottom: 20px;
+        }
+
         .radar-section {
             margin-top: 50px;
             border: 2px solid limegreen;
@@ -230,6 +240,24 @@
             .predict-section-form {
                 grid-template-columns: 1fr;
             }
+
+            /* The bordered plot frame becomes a sideways scroller: the plot is laid out at
+               MOBILE_PLOT_WIDTH so the hourly data stays readable instead of being squeezed. */
+            .plots-container>div {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior-x: contain;
+            }
+
+            /* Let a swipe scroll the frame instead of being swallowed by Plotly's drag layer */
+            .plots-container>div .nsewdrag,
+            .plots-container>div .drag {
+                touch-action: pan-x pan-y !important;
+            }
+
+            .plot-swipe-hint {
+                display: block;
+            }
         }
     </style>
 </head>
@@ -284,6 +312,7 @@
         <div id="loading">>> PROCESSING DATA...</div>
         <div id="error"></div>
         <div id="output"></div>
+        <div class="plot-swipe-hint">&gt;&gt; SWIPE SIDEWAYS FOR MORE DATA</div>
 
         <h2>⛈️ NERD WEATHER TERMINAL ⛈️</h2>
         <div class="form-section">
@@ -350,11 +379,77 @@
         const radarError = document.getElementById('radar-error');
         const radarOutput = document.getElementById('radar-output');
 
+        const MOBILE_BREAKPOINT = 768;   // keep in sync with the CSS media query
+        const MOBILE_PLOT_WIDTH = 1200;  // px of plot on a phone: ~36h of data per screen
+
         // Load everything when page loads
         window.addEventListener('load', () => {
             loadPlots();
             loadRadarVideo();
         });
+
+        // Portrait phones are far too narrow for 5 days of hourly data, so there the plot gets a
+        // fixed width and the frame around it scrolls sideways (see the media query above).
+        // Plotly's own `responsive: true` only ever fits the plot to its container, which is what
+        // squeezes it, so the width is driven from here instead.
+        function fitPlotToViewport() {
+            whenPlotReady(gd => {
+                if (window.innerWidth <= MOBILE_BREAKPOINT) {
+                    // The element keeps the width:100% that Plotly wrote into it, so set it too:
+                    // the frame then scrolls by the real box, not by overflowing content.
+                    gd.style.width = MOBILE_PLOT_WIDTH + 'px';
+                    // dragmode off so a swipe scrolls the frame instead of zooming the plot
+                    Plotly.relayout(gd, { width: MOBILE_PLOT_WIDTH, autosize: false, dragmode: false });
+                } else {
+                    gd.style.width = '100%';
+                    Plotly.relayout(gd, { width: null, autosize: true, dragmode: 'zoom' })
+                        .then(() => Plotly.Plots.resize(gd));
+                }
+            });
+        }
+
+        // Plotly draws asynchronously, so wait for the figure before relayouting it.
+        function whenPlotReady(callback, tries = 40) {
+            const gd = document.getElementById('merged_plot');
+            if (gd && window.Plotly && gd._fullLayout) {
+                callback(gd);
+                return;
+            }
+            if (tries > 0) {
+                requestAnimationFrame(() => whenPlotReady(callback, tries - 1));
+            }
+        }
+
+        let fitPlotTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(fitPlotTimer);
+            fitPlotTimer = setTimeout(fitPlotToViewport, 150);
+        });
+        // Rotating to landscape puts innerWidth past the breakpoint, which gives back the fluid
+        // full-width plot. The delay lets the viewport settle before measuring it.
+        window.addEventListener('orientationchange', () => {
+            clearTimeout(fitPlotTimer);
+            fitPlotTimer = setTimeout(fitPlotToViewport, 300);
+        });
+
+        // The plot arrives as an HTML fragment with its own <script> tags, which do not run when
+        // assigned through innerHTML - they have to be re-created to execute.
+        function renderPlots(html) {
+            output.innerHTML = html;
+
+            output.querySelectorAll('script').forEach(script => {
+                const newScript = document.createElement('script');
+                newScript.type = 'text/javascript';
+                if (script.src) {
+                    newScript.src = script.src;
+                } else {
+                    newScript.textContent = script.textContent;
+                }
+                document.body.appendChild(newScript);
+            });
+
+            fitPlotToViewport();
+        }
 
         // Handle form submission - only run prediction
         form.addEventListener('submit', (e) => {
@@ -427,20 +522,7 @@
                     throw new Error('Could not load plots file');
                 }
 
-                let html = await response.text();
-                output.innerHTML = html;
-
-                const scripts = output.querySelectorAll('script');
-                scripts.forEach(script => {
-                    const newScript = document.createElement('script');
-                    newScript.type = 'text/javascript';
-                    if (script.src) {
-                        newScript.src = script.src;
-                    } else {
-                        newScript.textContent = script.textContent;
-                    }
-                    document.body.appendChild(newScript);
-                });
+                renderPlots(await response.text());
 
             } catch (error) {
                 console.error('Load error:', error);
@@ -499,19 +581,7 @@
 
                 const data = await readJsonResponse(response, 'Prediction failed');
 
-                output.innerHTML = data.html;
-
-                const scripts = output.querySelectorAll('script');
-                scripts.forEach(script => {
-                    const newScript = document.createElement('script');
-                    newScript.type = 'text/javascript';
-                    if (script.src) {
-                        newScript.src = script.src;
-                    } else {
-                        newScript.textContent = script.textContent;
-                    }
-                    document.body.appendChild(newScript);
-                });
+                renderPlots(data.html);
 
             } catch (error) {
                 console.error('Error:', error);

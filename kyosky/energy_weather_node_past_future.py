@@ -673,7 +673,8 @@ def create_merged_plot(
         rows=3,
         cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.05,
+        # room for a row of date tick labels in each gap between the subplots
+        vertical_spacing=0.07,
         specs=[
             [{"secondary_y": True}],
             [{"secondary_y": True}],
@@ -1160,6 +1161,8 @@ def create_merged_plot(
     )
 
     # ========== Add red dashed vertical line separating past and future ==========
+    # Axis references of each subplot, for the "NOW" label that sits next to the line
+    now_label_refs = {1: ("x", "y domain"), 2: ("x2", "y3 domain"), 3: ("x3", "y5 domain")}
     for row in [1, 2, 3]:
         fig.add_vline(
             x=transition_time,
@@ -1169,40 +1172,24 @@ def create_merged_plot(
             row=row,
             col=1,
         )
-        # Add annotations for the transition line
-        if row == 1:
-            fig.add_annotation(
-                x=transition_time,
-                y=-0.14,
-                text="NOW",
-                showarrow=False,
-                font=dict(color="red", size=12, family="Arial Black"),
-                xref="x",
-                yref="y domain",
-            )
-        elif row == 2:
-            # Added annotation for second subplot
-            fig.add_annotation(
-                x=transition_time,
-                y=-0.14,
-                text="NOW",
-                showarrow=False,
-                font=dict(color="red", size=12, family="Arial Black"),
-                xref="x2",
-                yref="y3 domain",
-            )
-        elif row == 3:
-            fig.add_annotation(
-                x=transition_time,
-                y=-0.14,
-                text="NOW",
-                showarrow=False,
-                font=dict(color="red", size=12, family="Arial Black"),
-                xref="x3",
-                yref="y5 domain",
-            )
+        # The label goes inside the top of the subplot: the gaps underneath carry date tick
+        # labels now, which the old position (y=-0.14) would have collided with.
+        xref, yref = now_label_refs[row]
+        fig.add_annotation(
+            x=transition_time,
+            y=0.98,
+            yanchor="top",
+            text="NOW",
+            showarrow=False,
+            font=dict(color="red", size=12, family="Arial Black"),
+            xref=xref,
+            yref=yref,
+        )
 
-    # Show x-axis on both top and bottom of first subplot
+    # Date labels on every axis, so no subplot boundary is left bare. One axis can only print
+    # its labels on one side, so the three subplot axes cover the figure top (subplot 1, moved
+    # up by side="top"), the gap above subplot 2 and the figure bottom (subplot 3); the gap
+    # above subplot 3 gets the extra overlaid axis set up below.
     fig.update_xaxes(
         side="top",
         showticklabels=True,
@@ -1213,7 +1200,16 @@ def create_merged_plot(
         col=1,
     )
 
-    # Also show x-axis at bottom of last subplot
+    fig.update_xaxes(
+        side="top",
+        showticklabels=True,
+        showgrid=True,
+        gridcolor="grey",
+        gridwidth=1,
+        row=2,
+        col=1,
+    )
+
     fig.update_xaxes(
         showticklabels=True,
         showgrid=True,
@@ -1223,10 +1219,40 @@ def create_merged_plot(
         col=1,
     )
 
+    # Fourth x-axis, sharing subplot 3's plot area, purely to label the gap above it.
+    # "matches" keeps it locked to the shared range when zooming or panning.
+    fig.update_layout(
+        xaxis4=dict(
+            overlaying="x3",
+            matches="x3",
+            # without an explicit anchor the axis defaults to the first subplot and ends up
+            # drawn at the top of the figure
+            anchor="y5",
+            side="top",
+            showticklabels=True,
+            showgrid=False,
+            ticks="outside",
+        )
+    )
+    # Plotly only draws an axis that a trace refers to, hence this invisible anchor point.
+    # Note the axes are set explicitly: passing row/col would reassign it to x3.
+    fig.add_trace(
+        go.Scatter(
+            x=[transition_time],
+            y=[0],
+            xaxis="x4",
+            yaxis="y5",
+            mode="markers",
+            marker=dict(opacity=0),
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+
     # Layout settings
     fig.update_layout(
         title=f"Weather & Energy Data (DWD) - {location} - {lat} N° {lon} E°",
-        height=900,
+        height=950,
         plot_bgcolor="black",
         paper_bgcolor="black",
         font=dict(color="white"),
