@@ -636,6 +636,49 @@ def merge_and_calculate_power(
     return data_hourly_dwd, power_future_plt
 
 
+CLOUD_BANDS = ("cloud_low", "cloud_mid", "cloud_high")
+
+
+def add_cloud_bands(fig, row, timestamps, coverages, axis_max):
+    """Draw hourly cloud cover as grey boxes, denser cover being brighter and more opaque.
+
+    The three layers are stacked into thirds of the panel, low at the bottom and high at the
+    top, so together they fill `axis_max` - the top of the panel they are drawn behind.
+    """
+    band_height = axis_max / len(CLOUD_BANDS)
+    for band, coverage in enumerate(coverages):
+        base = band * band_height
+        for i in range(len(timestamps) - 1):
+            cover = float(coverage[i])
+            if cover <= 0:
+                continue
+            top = base + band_height * (cover / 100)
+            opacity = 0.02 + (cover / 100) * 0.5
+            grey = int(60 + (cover / 100) * 195)
+            edge = min(grey + 20, 255)
+            fig.add_trace(
+                go.Scatter(
+                    x=[
+                        timestamps[i],
+                        timestamps[i + 1],
+                        timestamps[i + 1],
+                        timestamps[i],
+                    ],
+                    y=[base, base, top, top],
+                    fill="toself",
+                    fillcolor=f"rgba({grey}, {grey}, {grey}, {opacity})",
+                    line=dict(
+                        width=0.5,
+                        color=f"rgba({edge}, {edge}, {edge}, {opacity * 0.6})",
+                    ),
+                    showlegend=False,
+                    hoverinfo="skip",
+                ),
+                row=row,
+                col=1,
+            )
+
+
 def create_merged_plot(
     data_hourly_dwd,
     forecast_data,
@@ -645,6 +688,7 @@ def create_merged_plot(
     location,
     lat,
     lon,
+    pv_system_size_kWp,
 ):
     """
     Create a single merged plot showing both historical and forecast data
@@ -805,228 +849,6 @@ def create_merged_plot(
     max_precip = max(max_past, max_future)
     y_range = [0, 1] if max_precip < 1 else [0, max_precip]
 
-    if max_precip < 1:
-        max_precip = 1
-
-    # Add cloud cover for past data
-    if (
-        data_hourly_dwd is not None
-        and len(data_hourly_dwd) > 0
-        and "cloud_low" in data_hourly_dwd.columns
-    ):
-        past_cloud_low = data_hourly_dwd["cloud_low"].values
-        past_cloud_mid = data_hourly_dwd["cloud_mid"].values
-        past_cloud_high = data_hourly_dwd["cloud_high"].values
-        past_timestamps = data_hourly_dwd.index.tolist()
-
-        # Low clouds - past
-        for i in range(len(past_timestamps) - 1):
-            cloud_cov = float(past_cloud_low[i])
-            if cloud_cov > 0:
-                opacity = 0.02 + (cloud_cov / 100) * 0.5  # Viel transparenter
-                grey_val = int(60 + (cloud_cov / 100) * 195)
-                fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-                line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.3})"
-
-                low_y_base = 0
-                low_y_upper = (max_precip / 3) * (cloud_cov / 100)
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=[
-                            past_timestamps[i],
-                            past_timestamps[i + 1],
-                            past_timestamps[i + 1],
-                            past_timestamps[i],
-                        ],
-                        y=[low_y_base, low_y_base, low_y_upper, low_y_upper],
-                        fill="toself",
-                        fillcolor=fill_color,
-                        line=dict(width=0.5, color=line_color),
-                        showlegend=False,
-                        hoverinfo="skip",
-                    ),
-                    row=2,
-                    col=1,
-                )
-
-        # Mid clouds - past
-        for i in range(len(past_timestamps) - 1):
-            cloud_cov = float(past_cloud_mid[i])
-            if cloud_cov > 0:
-                opacity = 0.02 + (cloud_cov / 100) * 0.5
-                grey_val = int(60 + (cloud_cov / 100) * 195)
-                fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-                line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.6})"
-
-                mid_y_base = max_precip / 3
-                mid_y_upper = (max_precip / 3) + (max_precip / 3) * (cloud_cov / 100)
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=[
-                            past_timestamps[i],
-                            past_timestamps[i + 1],
-                            past_timestamps[i + 1],
-                            past_timestamps[i],
-                        ],
-                        y=[mid_y_base, mid_y_base, mid_y_upper, mid_y_upper],
-                        fill="toself",
-                        fillcolor=fill_color,
-                        line=dict(width=0.5, color=line_color),
-                        showlegend=False,
-                        hoverinfo="skip",
-                    ),
-                    row=2,
-                    col=1,
-                )
-
-        # High clouds - past
-        for i in range(len(past_timestamps) - 1):
-            cloud_cov = float(past_cloud_high[i])
-            if cloud_cov > 0:
-                opacity = 0.02 + (cloud_cov / 100) * 0.5
-                grey_val = int(60 + (cloud_cov / 100) * 195)
-                fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-                line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.6})"
-
-                high_y_base = (max_precip / 3) * 2
-                high_y_upper = (max_precip / 3) * 2 + (max_precip / 3) * (
-                    cloud_cov / 100
-                )
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=[
-                            past_timestamps[i],
-                            past_timestamps[i + 1],
-                            past_timestamps[i + 1],
-                            past_timestamps[i],
-                        ],
-                        y=[high_y_base, high_y_base, high_y_upper, high_y_upper],
-                        fill="toself",
-                        fillcolor=fill_color,
-                        line=dict(width=0.5, color=line_color),
-                        showlegend=False,
-                        hoverinfo="skip",
-                    ),
-                    row=2,
-                    col=1,
-                )
-
-    # Add cloud cover as cloud-like shapes for future data
-    if len(timestamps) > 0 and (clouds_low or clouds_mid or clouds_high):
-        # Low clouds - from 0 up to ~0.33 (one third)
-        low_cloud_y_base = [0] * len(timestamps)
-        low_cloud_y_upper = [(max_precip / 3) * (c / 100) for c in clouds_low]
-
-        for i in range(len(timestamps) - 1):
-            cloud_cov = clouds_low[i]
-            # Map coverage to opacity: 10% = 0.1 opacity, 100% = 0.9 opacity
-            opacity = 0.02 + (cloud_cov / 100) * 0.5
-            # Map coverage to color: 10% = darkgray (60,60,60), 100% = white (255,255,255)
-            grey_val = int(60 + (cloud_cov / 100) * 195)
-            fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-            line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.6})"
-
-            fig.add_trace(
-                go.Scatter(
-                    x=[
-                        timestamps[i],
-                        timestamps[i + 1],
-                        timestamps[i + 1],
-                        timestamps[i],
-                    ],
-                    y=[
-                        low_cloud_y_base[i],
-                        low_cloud_y_base[i + 1],
-                        low_cloud_y_upper[i + 1],
-                        low_cloud_y_upper[i],
-                    ],
-                    fill="toself",
-                    fillcolor=fill_color,
-                    line=dict(width=0.5, color=line_color),
-                    showlegend=False,
-                    hoverinfo="skip",
-                ),
-                row=2,
-                col=1,
-            )
-
-        # Mid clouds - from ~0.33 to ~0.66 (middle third)
-        mid_cloud_y_base = [(max_precip / 3) for _ in timestamps]
-        mid_cloud_y_upper = [
-            (max_precip / 3) + (max_precip / 3) * (c / 100) for c in clouds_mid
-        ]
-
-        for i in range(len(timestamps) - 1):
-            cloud_cov = clouds_mid[i]
-            opacity = 0.02 + (cloud_cov / 100) * 0.5
-            grey_val = int(60 + (cloud_cov / 100) * 195)
-            fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-            line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.6})"
-
-            fig.add_trace(
-                go.Scatter(
-                    x=[
-                        timestamps[i],
-                        timestamps[i + 1],
-                        timestamps[i + 1],
-                        timestamps[i],
-                    ],
-                    y=[
-                        mid_cloud_y_base[i],
-                        mid_cloud_y_base[i + 1],
-                        mid_cloud_y_upper[i + 1],
-                        mid_cloud_y_upper[i],
-                    ],
-                    fill="toself",
-                    fillcolor=fill_color,
-                    line=dict(width=0.5, color=line_color),
-                    showlegend=False,
-                    hoverinfo="skip",
-                ),
-                row=2,
-                col=1,
-            )
-
-        # High clouds - from ~0.66 to max_precip
-        high_cloud_y_base = [(max_precip / 3) * 2 for _ in timestamps]
-        high_cloud_y_upper = [
-            (max_precip / 3) * 2 + (max_precip / 3) * (c / 100) for c in clouds_high
-        ]
-
-        for i in range(len(timestamps) - 1):
-            cloud_cov = clouds_high[i]
-            opacity = 0.02 + (cloud_cov / 100) * 0.5
-            grey_val = int(60 + (cloud_cov / 100) * 195)
-            fill_color = f"rgba({grey_val}, {grey_val}, {grey_val}, {opacity})"
-            line_color = f"rgba({min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {min(grey_val + 20, 255)}, {opacity * 0.6})"
-
-            fig.add_trace(
-                go.Scatter(
-                    x=[
-                        timestamps[i],
-                        timestamps[i + 1],
-                        timestamps[i + 1],
-                        timestamps[i],
-                    ],
-                    y=[
-                        high_cloud_y_base[i],
-                        high_cloud_y_base[i + 1],
-                        high_cloud_y_upper[i + 1],
-                        high_cloud_y_upper[i],
-                    ],
-                    fill="toself",
-                    fillcolor=fill_color,
-                    line=dict(width=0.5, color=line_color),
-                    showlegend=False,
-                    hoverinfo="skip",
-                ),
-                row=2,
-                col=1,
-            )
-
     # Past precipitation
     fig.add_trace(
         go.Bar(
@@ -1103,7 +925,7 @@ def create_merged_plot(
             )
 
     fig.update_yaxes(
-        title_text="Clouds/Precipitation (mm)",
+        title_text="Precipitation (mm)",
         secondary_y=False,
         gridcolor="grey",
         gridwidth=1,
@@ -1130,13 +952,49 @@ def create_merged_plot(
         col=1,
     )
 
-    # ========== ROW 3: PV and Wind Power ==========
+    # ========== ROW 3: Clouds and PV ==========
+    # PV is drawn per kWp installed, so the panel always reads 0..1 and can be read together
+    # with the cloud cover behind it as "how much sun is there".
+    pv_past_yield = (
+        df_pv_past_processed["AC Power (kW)"] / pv_system_size_kWp
+        if df_pv_past_processed is not None
+        else pd.Series(dtype=float)
+    )
+    pv_forecast_yield = (
+        df_pv_forecast_processed["AC Power (kW)"] / pv_system_size_kWp
+        if df_pv_forecast_processed is not None
+        else pd.Series(dtype=float)
+    )
+    pv_axis_max = max(
+        1.0,
+        pv_past_yield.max() if not pv_past_yield.empty else 0,
+        pv_forecast_yield.max() if not pv_forecast_yield.empty else 0,
+    )
+
+    # Clouds first so the PV curves are drawn on top of them
+    if (
+        data_hourly_dwd is not None
+        and len(data_hourly_dwd) > 0
+        and "cloud_low" in data_hourly_dwd.columns
+    ):
+        add_cloud_bands(
+            fig,
+            3,
+            data_hourly_dwd.index.tolist(),
+            [data_hourly_dwd[band].values for band in CLOUD_BANDS],
+            pv_axis_max,
+        )
+    if len(timestamps) > 0 and (clouds_low or clouds_mid or clouds_high):
+        add_cloud_bands(
+            fig, 3, timestamps, [clouds_low, clouds_mid, clouds_high], pv_axis_max
+        )
+
     # Past PV Power
     if df_pv_past_processed is not None:
         fig.add_trace(
             go.Scatter(
                 x=df_pv_past_processed["datetime"],
-                y=df_pv_past_processed["AC Power (kW)"],
+                y=pv_past_yield,
                 name="PV Power (Past)",
                 marker=dict(color="yellow"),
                 line=dict(width=2),
@@ -1150,7 +1008,7 @@ def create_merged_plot(
         fig.add_trace(
             go.Scatter(
                 x=df_pv_forecast_processed["datetime"],
-                y=df_pv_forecast_processed["AC Power (kW)"],
+                y=pv_forecast_yield,
                 name="PV Power (Forecast)",
                 marker=dict(color="gold"),
                 line=dict(width=2, dash="dash"),
@@ -1159,51 +1017,53 @@ def create_merged_plot(
             col=1,
         )
 
-    # Past Wind Power
-    fig.add_trace(
-        go.Scatter(
-            x=data_hourly_dwd.index,
-            y=data_hourly_dwd["power"],
-            name="Wind Power (Past)",
-            marker=dict(color="cyan"),
-            line=dict(width=2),
-        ),
-        row=3,
-        col=1,
-        secondary_y=True,
-    )
-
-    # Future Wind Power
-    fig.add_trace(
-        go.Scatter(
-            x=timestamps,
-            y=power_future_plt,
-            name="Wind Power (Forecast)",
-            marker=dict(color="cyan"),
-            line=dict(width=2, dash="dash"),
-        ),
-        row=3,
-        col=1,
-        secondary_y=True,
-    )
+    # Wind power is parked for now - it says little next to the wind speed in row 2.
+    # # Past Wind Power
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=data_hourly_dwd.index,
+    #         y=data_hourly_dwd["power"],
+    #         name="Wind Power (Past)",
+    #         marker=dict(color="cyan"),
+    #         line=dict(width=2),
+    #     ),
+    #     row=3,
+    #     col=1,
+    #     secondary_y=True,
+    # )
+    #
+    # # Future Wind Power
+    # fig.add_trace(
+    #     go.Scatter(
+    #         x=timestamps,
+    #         y=power_future_plt,
+    #         name="Wind Power (Forecast)",
+    #         marker=dict(color="cyan"),
+    #         line=dict(width=2, dash="dash"),
+    #     ),
+    #     row=3,
+    #     col=1,
+    #     secondary_y=True,
+    # )
 
     fig.update_yaxes(
-        title_text="PV Power (kWp)",
+        title_text="Clouds / PV (kW per kWp)",
         gridcolor="grey",
         gridwidth=1,
+        range=[0, pv_axis_max],
         row=3,
         col=1,
         secondary_y=False,
     )
-    fig.update_yaxes(
-        title_text="Wind Power (kW)",
-        row=3,
-        col=1,
-        secondary_y=True,
-        gridcolor="grey",
-        gridwidth=1,
-        griddash="dash",
-    )
+    # fig.update_yaxes(
+    #     title_text="Wind Power (kW)",
+    #     row=3,
+    #     col=1,
+    #     secondary_y=True,
+    #     gridcolor="grey",
+    #     gridwidth=1,
+    #     griddash="dash",
+    # )
 
     # ========== Add red dashed vertical line separating past and future ==========
     # Axis references of each subplot, for the "NOW" label that sits next to the line
@@ -1536,6 +1396,7 @@ def main():
         location,
         lat,
         lon,
+        pv_system_size_kWp,
     )
 
     save_plots(merged_fig)
