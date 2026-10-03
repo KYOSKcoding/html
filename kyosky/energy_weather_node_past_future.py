@@ -89,6 +89,8 @@ def get_historical_data_dwd(lat, lon, start_date, end_date):
             "cloudcover_low",
             "cloudcover_mid",
             "cloudcover_high",
+            "wind_gusts_10m",
+            "wind_direction_10m",
         ],
     }
     responses = openmeteo.weather_api(url, params=params)
@@ -106,6 +108,8 @@ def get_historical_data_dwd(lat, lon, start_date, end_date):
     hourly_cloudcover_low = hourly.Variables(6).ValuesAsNumpy()
     hourly_cloudcover_mid = hourly.Variables(7).ValuesAsNumpy()
     hourly_cloudcover_high = hourly.Variables(8).ValuesAsNumpy()
+    hourly_wind_gusts_10m = hourly.Variables(9).ValuesAsNumpy()
+    hourly_wind_direction_10m = hourly.Variables(10).ValuesAsNumpy()
 
     hourly_data = {
         "date": pd.date_range(
@@ -117,6 +121,8 @@ def get_historical_data_dwd(lat, lon, start_date, end_date):
         "temp": hourly_temperature_2m,
         "prcp": hourly_precipitation,
         "wspd": hourly_wind_speed_10m,  # Open-Meteo already answers in km/h
+        "wgst": hourly_wind_gusts_10m,
+        "wdir": hourly_wind_direction_10m,
         "rhum": hourly_relative_humidity_2m,
         "pres": hourly_surface_pressure,
         "cloud_low": hourly_cloudcover_low,
@@ -153,6 +159,8 @@ def get_forecast_data_dwd(lat, lon):
             "cloud_cover_low",
             "cloud_cover_mid",
             "cloud_cover_high",
+            "wind_gusts_10m",
+            "wind_direction_10m",
         ],
     }
     responses = openmeteo.weather_api(url, params=params)
@@ -170,6 +178,8 @@ def get_forecast_data_dwd(lat, lon):
     hourly_cloud_cover_low = hourly.Variables(7).ValuesAsNumpy()
     hourly_cloud_cover_mid = hourly.Variables(8).ValuesAsNumpy()
     hourly_cloud_cover_high = hourly.Variables(9).ValuesAsNumpy()
+    hourly_wind_gusts_10m = hourly.Variables(10).ValuesAsNumpy()
+    hourly_wind_direction_10m = hourly.Variables(11).ValuesAsNumpy()
 
     timestamps = pd.date_range(
         start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
@@ -189,6 +199,8 @@ def get_forecast_data_dwd(lat, lon):
     clounds_low = hourly_cloud_cover_low.tolist()
     clounds_mid = hourly_cloud_cover_mid.tolist()
     clounds_high = hourly_cloud_cover_high.tolist()
+    wind_gusts = hourly_wind_gusts_10m.tolist()
+    wind_dirs = hourly_wind_direction_10m.tolist()
 
     return (
         temps,
@@ -201,6 +213,8 @@ def get_forecast_data_dwd(lat, lon):
         clounds_low,
         clounds_mid,
         clounds_high,
+        wind_gusts,
+        wind_dirs,
     )
 
 
@@ -482,6 +496,8 @@ def filter_forecast_data(
     clouds_low,
     clouds_mid,
     clouds_high,
+    wind_gusts,
+    wind_dirs,
     first_date_dt,
     end_date_dt,
 ):
@@ -497,7 +513,7 @@ def filter_forecast_data(
         Filtered tuples of all data
     """
     if not timestamps:
-        return ([], [], [], [], [], [], [])
+        return ([],) * 12
 
     # Convert timestamps to datetime objects for comparison
     dt_timestamps = [pd.to_datetime(ts) for ts in timestamps]
@@ -519,7 +535,7 @@ def filter_forecast_data(
         print(
             f"Warning: No forecast data found in range {first_date_dt} to {end_date_dt}"
         )
-        return ([], [], [], [], [], [], [])
+        return ([],) * 12
 
     # Filter all lists using valid indices
     filtered_temps = [temps[i] for i in valid_indices]
@@ -532,6 +548,8 @@ def filter_forecast_data(
     filtered_clouds_low = [clouds_low[i] for i in valid_indices]
     filtered_clouds_mid = [clouds_mid[i] for i in valid_indices]
     filtered_clouds_high = [clouds_high[i] for i in valid_indices]
+    filtered_wind_gusts = [wind_gusts[i] for i in valid_indices]
+    filtered_wind_dirs = [wind_dirs[i] for i in valid_indices]
 
     print(
         f"Filtered forecast data: {len(valid_indices)} records from {filtered_timestamps[0]} to {filtered_timestamps[-1]}"
@@ -548,6 +566,8 @@ def filter_forecast_data(
         filtered_clouds_low,
         filtered_clouds_mid,
         filtered_clouds_high,
+        filtered_wind_gusts,
+        filtered_wind_dirs,
     )
 
 
@@ -592,6 +612,8 @@ def merge_and_calculate_power(
         clouds_low,
         clouds_mid,
         clouds_high,
+        wind_gusts,
+        wind_dirs,
     ) = forecast_data
 
     # Calculate wind power for past (only if data exists)
@@ -634,6 +656,39 @@ def merge_and_calculate_power(
         power_future_plt = pd.Series()
 
     return data_hourly_dwd, power_future_plt
+
+
+WIND_ARROW_STEP = 3  # hours between wind direction arrows, so they stay apart on a phone
+
+
+def add_wind_arrows(fig, row, timestamps, directions, y, name, showlegend):
+    """Mark the wind direction along the top of a panel, one arrow every few hours.
+
+    Open-Meteo reports the direction the wind comes FROM, so the arrows are turned around:
+    they point the way the wind blows, a northerly pointing down the panel.
+    """
+    picked = range(0, len(timestamps), WIND_ARROW_STEP)
+    fig.add_trace(
+        go.Scatter(
+            x=[timestamps[i] for i in picked],
+            y=[y] * len(list(picked)),
+            mode="markers",
+            marker=dict(
+                symbol="arrow",
+                size=9,
+                color="red",
+                angle=[(float(directions[i]) + 180) % 360 for i in picked],
+            ),
+            name=name,
+            legendgroup="wind_direction",
+            showlegend=showlegend,
+            customdata=[round(float(directions[i])) for i in picked],
+            hovertemplate="wind from %{customdata}\u00b0<extra></extra>",
+        ),
+        row=row,
+        col=1,
+        secondary_y=True,
+    )
 
 
 CLOUD_BANDS = ("cloud_low", "cloud_mid", "cloud_high")
@@ -707,6 +762,8 @@ def create_merged_plot(
         clouds_low,
         clouds_mid,
         clouds_high,
+        wind_gusts,
+        wind_dirs,
     ) = forecast_data
 
     # Put every series on the same clock before anything is compared or plotted: the weather
@@ -759,6 +816,8 @@ def create_merged_plot(
         clouds_low = clouds_low[idx:]
         clouds_mid = clouds_mid[idx:]
         clouds_high = clouds_high[idx:]
+        wind_gusts = wind_gusts[idx:]
+        wind_dirs = wind_dirs[idx:]
 
     fig = make_subplots(
         rows=3,
@@ -907,6 +966,62 @@ def create_merged_plot(
         secondary_y=True,
     )
 
+    # Gusts next to the wind they belong to, in a lighter red
+    fig.add_trace(
+        go.Scatter(
+            x=data_hourly_dwd.index,
+            y=data_hourly_dwd["wgst"],
+            name="Gusts (Past)",
+            opacity=1,
+            line=dict(width=1),
+            marker=dict(color="lightcoral"),
+        ),
+        row=2,
+        col=1,
+        secondary_y=True,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=timestamps,
+            y=wind_gusts,
+            name="Gusts (Forecast)",
+            opacity=1,
+            line=dict(width=1, dash="dash"),
+            marker=dict(color="lightcoral"),
+        ),
+        row=2,
+        col=1,
+        secondary_y=True,
+    )
+
+    # Wind direction rides in the headroom above the curves
+    wind_values = [
+        value
+        for value in (
+            list(data_hourly_dwd["wspd"].values)
+            + list(data_hourly_dwd["wgst"].values)
+            + list(wind_speeds)
+            + list(wind_gusts)
+        )
+        if pd.notna(value)
+    ]
+    wind_axis_max = (max(wind_values) if wind_values else 10) * 1.25
+    arrow_y = wind_axis_max * 0.93
+    if len(data_hourly_dwd) > 0 and "wdir" in data_hourly_dwd.columns:
+        add_wind_arrows(
+            fig,
+            2,
+            data_hourly_dwd.index.tolist(),
+            data_hourly_dwd["wdir"].values,
+            arrow_y,
+            "Wind direction",
+            True,
+        )
+    if timestamps and wind_dirs:
+        add_wind_arrows(
+            fig, 2, timestamps, wind_dirs, arrow_y, "Wind direction", False
+        )
+
     # Add precipitation probability annotations for forecast
     for i in range(len(rain_probabs)):
         if rain_probabs[i] > 4:
@@ -936,10 +1051,11 @@ def create_merged_plot(
         col=1,
     )
     fig.update_yaxes(
-        title_text="Wind (km/h)",
+        title_text="Wind / gusts (km/h)",
         secondary_y=True,
         row=2,
         col=1,
+        range=[0, wind_axis_max],
         gridcolor="grey",
         gridwidth=1,
         griddash="dash",

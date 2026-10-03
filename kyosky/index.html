@@ -213,6 +213,15 @@
             border-top-style: dashed;
         }
 
+        .plot-legend .legend-swatch.arrow {
+            width: 0;
+            height: 0;
+            border-top: none;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 9px solid var(--swatch-color, limegreen);
+        }
+
         .plot-legend .legend-swatch.block {
             height: 10px;
             border: none;
@@ -489,6 +498,8 @@
                     (trace.marker && trace.marker.color) || (trace.line && trace.line.color) || 'limegreen');
                 if (trace.type === 'bar') {
                     swatch.classList.add('block');
+                } else if (trace.mode === 'markers') {
+                    swatch.classList.add('arrow');
                 } else if (trace.line && trace.line.dash) {
                     swatch.classList.add('dashed');
                 }
@@ -497,7 +508,13 @@
                 entry.appendChild(document.createTextNode(trace.name));
                 entry.addEventListener('click', () => {
                     const hidden = gd.data[index].visible === 'legendonly';
-                    Plotly.restyle(gd, { visible: hidden ? true : 'legendonly' }, [index]);
+                    // traces sharing a legendgroup (the wind direction arrows) toggle together,
+                    // the way they do in Plotly's own legend
+                    const group = gd.data[index].legendgroup;
+                    const targets = group
+                        ? gd.data.reduce((all, t, i) => (t.legendgroup === group ? all.concat(i) : all), [])
+                        : [index];
+                    Plotly.restyle(gd, { visible: hidden ? true : 'legendonly' }, targets);
                     entry.classList.toggle('off', !hidden);
                 });
                 box.appendChild(entry);
