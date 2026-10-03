@@ -176,6 +176,10 @@
             margin-bottom: 15px;
         }
 
+        #todayBtn {
+            min-width: 10em;
+        }
+
         #todayBtn.active {
             background-color: limegreen;
             color: black;
@@ -476,6 +480,8 @@
         // Zooms every subplot to the next 24 hours, or back to the whole forecast.
         function setTodayView(on) {
             todayActive = on;
+            // the label says what the next click does, not what is on screen
+            todayBtn.textContent = on ? '[GO BACK]' : '[TODAY]';
             todayBtn.classList.toggle('active', on);
             document.body.classList.toggle('today-view', on);
             whenPlotReady(gd => {
