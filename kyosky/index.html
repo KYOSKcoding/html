@@ -171,6 +171,54 @@
             background-color: rgba(0, 0, 0, 0.8);
         }
 
+        /* Phone only: the legend is taken out of the scrolling plot frame and rebuilt here,
+           so it stays on screen while swiping and leaves the graph its full width. */
+        .plot-legend {
+            display: none;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 2px 14px;
+            margin: 0 0 30px;
+        }
+
+        .plot-legend .legend-entry {
+            background: none;
+            border: none;
+            padding: 2px 0;
+            font-size: 0.85em;
+            color: limegreen;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .plot-legend .legend-entry:hover {
+            background: none;
+            color: limegreen;
+        }
+
+        .plot-legend .legend-entry.off {
+            opacity: 0.35;
+        }
+
+        .plot-legend .legend-swatch {
+            display: inline-block;
+            width: 18px;
+            height: 0;
+            border-top: 3px solid var(--swatch-color, limegreen);
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+
+        .plot-legend .legend-swatch.dashed {
+            border-top-style: dashed;
+        }
+
+        .plot-legend .legend-swatch.block {
+            height: 10px;
+            border: none;
+            background: var(--swatch-color, limegreen);
+        }
+
         /* Only shown on phones, where the plot gets a fixed width and scrolls sideways */
         .plot-swipe-hint {
             display: none;
@@ -258,6 +306,10 @@
             .plot-swipe-hint {
                 display: block;
             }
+
+            .plot-legend {
+                display: flex;
+            }
         }
     </style>
 </head>
@@ -313,6 +365,7 @@
         <div id="error"></div>
         <div id="output"></div>
         <div class="plot-swipe-hint">&gt;&gt; SWIPE SIDEWAYS FOR MORE DATA</div>
+        <div class="plot-legend" id="plot-legend"></div>
 
         <h2>⛈️ NERD WEATHER TERMINAL ⛈️</h2>
         <div class="form-section">
@@ -398,13 +451,56 @@
                     // The element keeps the width:100% that Plotly wrote into it, so set it too:
                     // the frame then scrolls by the real box, not by overflowing content.
                     gd.style.width = MOBILE_PLOT_WIDTH + 'px';
-                    // dragmode off so a swipe scrolls the frame instead of zooming the plot
-                    Plotly.relayout(gd, { width: MOBILE_PLOT_WIDTH, autosize: false, dragmode: false });
+                    // dragmode off so a swipe scrolls the frame instead of zooming the plot.
+                    // Plotly's own legend is as wide as the plot, so it would be cut off at the
+                    // screen edge and eat height inside the frame - it is rebuilt below instead.
+                    Plotly.relayout(gd, {
+                        width: MOBILE_PLOT_WIDTH, autosize: false, dragmode: false, showlegend: false
+                    }).then(() => buildLegend(gd));
                 } else {
                     gd.style.width = '100%';
-                    Plotly.relayout(gd, { width: null, autosize: true, dragmode: 'zoom' })
+                    Plotly.relayout(gd, { width: null, autosize: true, dragmode: 'zoom', showlegend: true })
                         .then(() => Plotly.Plots.resize(gd));
+                    buildLegend(null);
                 }
+            });
+        }
+
+        // Rebuilds the hidden Plotly legend as plain HTML under the plot frame, where it wraps
+        // to the screen instead of to the plot width. Entries toggle their trace like Plotly's
+        // own legend does. Passing no figure empties it again (desktop).
+        function buildLegend(gd) {
+            const box = document.getElementById('plot-legend');
+            if (!box) return;
+            box.innerHTML = '';
+            if (!gd) return;
+
+            gd.data.forEach((trace, index) => {
+                if (!trace.name || trace.showlegend === false) return;
+
+                const entry = document.createElement('button');
+                entry.type = 'button';
+                entry.className = 'legend-entry';
+                if (trace.visible === 'legendonly') entry.classList.add('off');
+
+                const swatch = document.createElement('span');
+                swatch.className = 'legend-swatch';
+                swatch.style.setProperty('--swatch-color',
+                    (trace.marker && trace.marker.color) || (trace.line && trace.line.color) || 'limegreen');
+                if (trace.type === 'bar') {
+                    swatch.classList.add('block');
+                } else if (trace.line && trace.line.dash) {
+                    swatch.classList.add('dashed');
+                }
+
+                entry.appendChild(swatch);
+                entry.appendChild(document.createTextNode(trace.name));
+                entry.addEventListener('click', () => {
+                    const hidden = gd.data[index].visible === 'legendonly';
+                    Plotly.restyle(gd, { visible: hidden ? true : 'legendonly' }, [index]);
+                    entry.classList.toggle('off', !hidden);
+                });
+                box.appendChild(entry);
             });
         }
 
