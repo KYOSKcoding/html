@@ -637,22 +637,23 @@ def merge_and_calculate_power(
 
 
 CLOUD_BANDS = ("cloud_low", "cloud_mid", "cloud_high")
+CLOUD_BAND_HEIGHT = 100  # each layer gets its own 0-100% slot on the cloud axis
 
 
-def add_cloud_bands(fig, row, timestamps, coverages, axis_max):
+def add_cloud_bands(fig, row, timestamps, coverages):
     """Draw hourly cloud cover as grey boxes, denser cover being brighter and more opaque.
 
-    The three layers are stacked into thirds of the panel, low at the bottom and high at the
-    top, so together they fill `axis_max` - the top of the panel they are drawn behind.
+    The three layers are stacked on the panel's secondary y axis, low at the bottom and high
+    at the top. Each one keeps its own 0-100% slot there, so the clouds are read off their
+    own scale instead of sharing the one the data on the primary axis uses.
     """
-    band_height = axis_max / len(CLOUD_BANDS)
     for band, coverage in enumerate(coverages):
-        base = band * band_height
+        base = band * CLOUD_BAND_HEIGHT
         for i in range(len(timestamps) - 1):
             cover = float(coverage[i])
             if cover <= 0:
                 continue
-            top = base + band_height * (cover / 100)
+            top = base + cover
             opacity = 0.02 + (cover / 100) * 0.5
             grey = int(60 + (cover / 100) * 195)
             edge = min(grey + 20, 255)
@@ -676,6 +677,7 @@ def add_cloud_bands(fig, row, timestamps, coverages, axis_max):
                 ),
                 row=row,
                 col=1,
+                secondary_y=True,
             )
 
 
@@ -982,11 +984,20 @@ def create_merged_plot(
             3,
             data_hourly_dwd.index.tolist(),
             [data_hourly_dwd[band].values for band in CLOUD_BANDS],
-            pv_axis_max,
         )
     if len(timestamps) > 0 and (clouds_low or clouds_mid or clouds_high):
-        add_cloud_bands(
-            fig, 3, timestamps, [clouds_low, clouds_mid, clouds_high], pv_axis_max
+        add_cloud_bands(fig, 3, timestamps, [clouds_low, clouds_mid, clouds_high])
+
+    # Dashed lines where one cloud layer ends and the next starts
+    for boundary in range(1, len(CLOUD_BANDS)):
+        fig.add_hline(
+            y=boundary * CLOUD_BAND_HEIGHT,
+            line_width=1,
+            line_dash="dash",
+            line_color="grey",
+            row=3,
+            col=1,
+            secondary_y=True,
         )
 
     # Past PV Power
@@ -1047,7 +1058,7 @@ def create_merged_plot(
     # )
 
     fig.update_yaxes(
-        title_text="Clouds / PV (kW per kWp)",
+        title_text="PV (kW per kWp)",
         gridcolor="grey",
         gridwidth=1,
         range=[0, pv_axis_max],
@@ -1055,15 +1066,20 @@ def create_merged_plot(
         col=1,
         secondary_y=False,
     )
-    # fig.update_yaxes(
-    #     title_text="Wind Power (kW)",
-    #     row=3,
-    #     col=1,
-    #     secondary_y=True,
-    #     gridcolor="grey",
-    #     gridwidth=1,
-    #     griddash="dash",
-    # )
+    # The cloud axis is labelled per layer rather than per percent: the ticks sit in the
+    # middle of each band, between the dashed lines that separate them.
+    fig.update_yaxes(
+        title_text="Clouds",
+        range=[0, len(CLOUD_BANDS) * CLOUD_BAND_HEIGHT],
+        tickvals=[
+            (band + 0.5) * CLOUD_BAND_HEIGHT for band in range(len(CLOUD_BANDS))
+        ],
+        ticktext=[name.replace("cloud_", "") for name in CLOUD_BANDS],
+        showgrid=False,
+        row=3,
+        col=1,
+        secondary_y=True,
+    )
 
     # ========== Add red dashed vertical line separating past and future ==========
     # Axis references of each subplot, for the "NOW" label that sits next to the line
