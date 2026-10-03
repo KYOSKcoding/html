@@ -171,6 +171,16 @@
             background-color: rgba(0, 0, 0, 0.8);
         }
 
+        .plot-controls {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        #todayBtn.active {
+            background-color: limegreen;
+            color: black;
+        }
+
         /* Phone only: the legend is taken out of the scrolling plot frame and rebuilt here,
            so it stays on screen while swiping and leaves the graph its full width. */
         .plot-legend {
@@ -316,6 +326,10 @@
                 display: block;
             }
 
+            .today-view .plot-swipe-hint {
+                display: none;
+            }
+
             .plot-legend {
                 display: flex;
             }
@@ -369,6 +383,10 @@
         </div>
 
         <h2>⛈️ WEATHER TIMESERIES ⛈️</h2>
+
+        <div class="plot-controls">
+            <button type="button" id="todayBtn">[TODAY]</button>
+        </div>
 
         <div id="loading">>> PROCESSING DATA...</div>
         <div id="error"></div>
@@ -440,6 +458,7 @@
         const radarLoading = document.getElementById('radar-loading');
         const radarError = document.getElementById('radar-error');
         const radarOutput = document.getElementById('radar-output');
+        const todayBtn = document.getElementById('todayBtn');
 
         const MOBILE_BREAKPOINT = 768;   // keep in sync with the CSS media query
         const MOBILE_PLOT_WIDTH = 1200;  // px of plot on a phone: ~36h of data per screen
@@ -450,6 +469,42 @@
             loadRadarVideo();
         });
 
+        let todayActive = false;
+
+        todayBtn.addEventListener('click', () => setTodayView(!todayActive));
+
+        // Zooms every subplot to the next 24 hours, or back to the whole forecast.
+        function setTodayView(on) {
+            todayActive = on;
+            todayBtn.classList.toggle('active', on);
+            document.body.classList.toggle('today-view', on);
+            whenPlotReady(gd => {
+                const range = on
+                    ? { 'xaxis3.range': dayAhead(gd) }
+                    : { 'xaxis3.autorange': true };
+                // every x axis matches xaxis3, so one range drives all three panels
+                Plotly.relayout(gd, range).then(() => fitPlotToViewport());
+            });
+        }
+
+        // The red NOW line carries the figure's own idea of the time, in the timezone the data
+        // was plotted in - the viewer's clock may be somewhere else entirely.
+        function dayAhead(gd) {
+            const nowLine = (gd.layout.shapes || []).find(
+                shape => shape.x0 === shape.x1 && shape.line && shape.line.color === 'red'
+            );
+            const from = nowLine ? new Date(nowLine.x0) : new Date();
+            const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+            return [plotTime(from), plotTime(to)];
+        }
+
+        // Plotly reads back what it was given: clock time with no timezone on it
+        function plotTime(date) {
+            const pad = value => String(value).padStart(2, '0');
+            return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+                + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+        }
+
         // Portrait phones are far too narrow for 5 days of hourly data, so there the plot gets a
         // fixed width and the frame around it scrolls sideways (see the media query above).
         // Plotly's own `responsive: true` only ever fits the plot to its container, which is what
@@ -457,15 +512,24 @@
         function fitPlotToViewport() {
             whenPlotReady(gd => {
                 if (window.innerWidth <= MOBILE_BREAKPOINT) {
+                    // A single day fits a phone screen, five days do not: only the full range is
+                    // laid out wide and swiped sideways.
+                    const wide = !todayActive;
                     // The element keeps the width:100% that Plotly wrote into it, so set it too:
                     // the frame then scrolls by the real box, not by overflowing content.
-                    gd.style.width = MOBILE_PLOT_WIDTH + 'px';
+                    gd.style.width = wide ? MOBILE_PLOT_WIDTH + 'px' : '100%';
                     // dragmode off so a swipe scrolls the frame instead of zooming the plot.
                     // Plotly's own legend is as wide as the plot, so it would be cut off at the
                     // screen edge and eat height inside the frame - it is rebuilt below instead.
                     Plotly.relayout(gd, {
-                        width: MOBILE_PLOT_WIDTH, autosize: false, dragmode: false, showlegend: false
-                    }).then(() => buildLegend(gd));
+                        width: wide ? MOBILE_PLOT_WIDTH : null,
+                        autosize: !wide,
+                        dragmode: false,
+                        showlegend: false
+                    }).then(() => {
+                        if (!wide) Plotly.Plots.resize(gd);
+                        buildLegend(gd);
+                    });
                 } else {
                     gd.style.width = '100%';
                     Plotly.relayout(gd, { width: null, autosize: true, dragmode: 'zoom', showlegend: true })
@@ -561,7 +625,7 @@
                 document.body.appendChild(newScript);
             });
 
-            fitPlotToViewport();
+            setTodayView(false);
         }
 
         // Handle form submission - only run prediction
