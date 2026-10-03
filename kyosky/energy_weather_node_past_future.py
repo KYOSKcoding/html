@@ -116,7 +116,7 @@ def get_historical_data_dwd(lat, lon, start_date, end_date):
         ),
         "temp": hourly_temperature_2m,
         "prcp": hourly_precipitation,
-        "wspd": hourly_wind_speed_10m * 3.6,  # Convert m/s to km/h
+        "wspd": hourly_wind_speed_10m,  # Open-Meteo already answers in km/h
         "rhum": hourly_relative_humidity_2m,
         "pres": hourly_surface_pressure,
         "cloud_low": hourly_cloudcover_low,
@@ -181,7 +181,7 @@ def get_forecast_data_dwd(lat, lon):
     # Convert to lists matching the old format
     temps = hourly_temperature_2m.tolist()
     humiditys = hourly_relative_humidity_2m.tolist()
-    wind_speeds = (hourly_wind_speed_10m * 3.6).tolist()  # Convert m/s to km/h
+    wind_speeds = hourly_wind_speed_10m.tolist()  # Open-Meteo already answers in km/h
     timestamps = timestamps.tolist()
     rain_probabs = (hourly_precipitation_probability).tolist()
     rains = hourly_precipitation.tolist()
