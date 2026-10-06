@@ -1748,7 +1748,7 @@ _init_scheduler = False
 # The page at kyo.sk/feedback posts here and the answers are mailed on. Nothing is kept:
 # no file, no database, and the answers never reach the log - people are being asked what
 # makes them feel unsafe, so the mail is the only copy.
-FEEDBACK_TO = "kyosk.feedback@uber.space"
+FEEDBACK_TO = "feedback@kyosk.uber.space"
 FEEDBACK_FROM = "kyosk@uber.space"
 SENDMAIL = "/usr/sbin/sendmail"
 
