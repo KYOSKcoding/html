@@ -129,7 +129,29 @@
         font-size: 1.2rem;
       }
     }
-  </style>
+  
+    .lang-switch {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .lang-switch button {
+      background: none;
+      color: #000;
+      border: 2px solid #000;
+      padding: 6px 14px;
+      font-family: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .lang-switch button[aria-pressed="true"] {
+      background: #000;
+      color: #00ff00;
+    }
+</style>
 </head>
 
 <body>
@@ -138,55 +160,219 @@
   </div>
 
   <div class="awareness-container">
+    <div class="lang-switch" id="lang-switch">
+      <button type="button" data-lang="de">DE</button>
+      <button type="button" data-lang="en">EN</button>
+      <button type="button" data-lang="es">ES</button>
+    </div>
+
     <div class="headline">
       Welcome to
       <img src="../kyo_dot_sk_logo_vektorisiert_black.svg" alt="kyo.sk" class="headline-logo">
     </div>
 
     <main>
-      <section class="card card-main" aria-labelledby="how-to-heading">
-        <h2 id="how-to-heading">How-To Awareness</h2>
-        <p>Wir sehen <strong>Awareness</strong> als kollektive Verantwortung von allen, die sich im Kyosk aufhalten.
-          Wenn du Grenzüberschreitungen oder diskriminierendes Verhalten beobachtest, <strong>schau nicht
-            weg</strong>: Unterstütze Betroffene, sprich Situationen an oder hole die Crew dazu.</p>
-        <p>Wir sind uns bewusst, dass der kyosk kein komplett sicherer Raum sein kann und möchten Dinge transparent
-          machen, die wir leisten und auch nicht leisten können.</p>
-        <h3>WAS WIR LEISTEN KÖNNEN:</h3>
-        <p>Du kannst dich an die Crew hinter dem Tresen wenden. Wir hören zu und schenken Betroffenen glauben, du
-          musst dich dafür nicht erklären.</p>
-        <p>Wir (alle) tragen Verantwortung für den Raum, das heißt:</p>
-        <ul>
-          <li>Wir sind solidarisch füreinander da. Das kann bedeuten, dass wir für betroffene Personen Grenzen
-            kommunizieren können und ggf. Menschen dazu auffordern können, den kyosk vorerst für den Abend zu
-            verlassen. <strong>Über die Ergreifung weiterer Maßnahmen wird plenarisch entschieden.</strong></li>
-          <li>Wir haben einen Rückzugsort, den wir ggf. für dich öffnen können.</li>
-          <li>Wir können persönliche Gespräche außerhalb des kyosk-Betriebs anbieten. Kontaktiere uns hierfür über die
-            Mailadresse <a href="mailto:interym@riseup.net">interym@riseup.net</a>.</li>
-          <li>Wir machen rauchfreie Schichten, achte dafür auf den Raumstatus auf der Website und den Channels.</li>
-          <li>Ihr könnt uns Feedback über verschiedene Wege kommunizieren. Entweder per Mail, im
-            Feedback-Briefkasten oder persönlich.</li>
-        </ul>
+      <section class="card card-main" aria-labelledby="main-heading">
+        <h2 id="main-heading"></h2>
+        <div id="main-intro"></div>
+        <h3 id="can-heading"></h3>
+        <div id="can-intro"></div>
+        <ul id="can-list"></ul>
       </section>
 
       <section class="card card-not" aria-labelledby="not-heading">
-        <h2 id="not-heading">WAS WIR NICHT LEISTEN KÖNNEN:</h2>
-        <ul>
-          <li>Wir sind kein professionelles Awareness-Team.</li>
-          <li>Wir können keine durchgehend nüchterne Ansprechperson garantieren.</li>
-          <li>Wir können Konflikte nicht immer aufklären oder entscheiden, „wer Recht hat“.</li>
-          <li>Wir können keinen vollständigen Schutz vor Übergriffen oder Diskriminierung gewährleisten.</li>
-        </ul>
+        <h2 id="not-heading"></h2>
+        <ul id="not-list"></ul>
       </section>
 
-      <section class="card card-important" aria-labelledby="important-heading">
-        <h2 id="important-heading">Wichtig:</h2>
-        <p>Im Kyosk wird teilweise geraucht, Alkohol konsumiert und es kann laut, voll und wuselig werden. Außerdem
-          stinkt's ziemlich. <strong>Sorry</strong>!</p>
-        <p>Awareness funktioniert nur gemeinsam. Achtet aufeinander, respektiert Grenzen und unterstützt Menschen,
-          die Unterstützung brauchen.</p>
+      <section class="card card-important" aria-labelledby="imp-heading">
+        <h2 id="imp-heading"></h2>
+        <div id="imp-body"></div>
       </section>
     </main>
   </div>
+
+  <script>
+    // The three posters, word for word. *stars* mark what is bold on the poster and the
+    // mail address becomes a link; nothing else is markup, so the text stays plain text.
+    const CONTENT = {
+      de: {
+        mainHeading: 'How-To Awareness',
+        intro: [
+          'Wir sehen *Awareness* als kollektive Verantwortung von allen, die sich im Kyosk aufhalten. Wenn du Grenzüberschreitungen oder diskriminierendes Verhalten beobachtest, *schau nicht weg*: Unterstütze Betroffene, sprich Situationen an oder hole die Crew dazu.',
+          'Wir sind uns bewusst, dass der kyosk kein komplett sicherer Raum sein kann und möchten Dinge transparent machen, die wir leisten und auch nicht leisten können.'
+        ],
+        canHeading: 'WAS WIR LEISTEN KÖNNEN:',
+        canIntro: [
+          'Du kannst dich an die Crew hinter dem Tresen wenden. Wir hören zu und schenken Betroffenen glauben, du musst dich dafür nicht erklären.',
+          'Wir (alle) tragen Verantwortung für den Raum, das heißt:'
+        ],
+        canList: [
+          'Wir sind solidarisch füreinander da. Das kann bedeuten, dass wir für betroffene Personen Grenzen kommunizieren können und ggf. Menschen dazu auffordern können, den kyosk vorerst für den Abend zu verlassen. *Über die Ergreifung weiterer Maßnahmen wird plenarisch entschieden.*',
+          'Wir haben einen Rückzugsort, den wir ggf. für dich öffnen können.',
+          'Wir können persönliche Gespräche außerhalb des kyosk-Betriebs anbieten. Kontaktiere uns hierfür über die Mailadresse interym@riseup.net.',
+          'Wir machen rauchfreie Shychten, achte dafür auf den Raumstatus auf der Website und den Channels.',
+          'Ihr könnt uns Feedback über verschiedene Wege kommunizieren. Entweder per Mail, im Feedback-Briefkasten oder persönlich.'
+        ],
+        notHeading: 'WAS WIR NICHT LEISTEN KÖNNEN:',
+        notList: [
+          'Wir sind kein professionelles Awareness-Team.',
+          'Wir können keine durchgehend nüchterne Ansprechperson garantieren.',
+          'Wir können Konflikte nicht immer aufklären oder entscheiden, „wer Recht hat“.',
+          'Wir können keinen vollständigen Schutz vor Übergriffen oder Diskriminierung gewährleisten.'
+        ],
+        impHeading: 'Wichtig:',
+        impBody: [
+          'Im Kyosk wird teilweise geraucht, Alkohol konsumiert und es kann laut, voll und wuselig werden. Außerdem stinkt’s ziemlich. *Sorry*!',
+          'Awareness funktioniert nur gemeinsam. Achtet aufeinander, respektiert Grenzen und unterstützt Menschen, die Unterstützung brauchen.'
+        ]
+      },
+      en: {
+        mainHeading: 'How-To Awareness',
+        intro: [
+          'Here, we define *awareness* as collective responsibility of everyone using this space and interacting inside of it. If you notice someone crossing personal borders or witness discriminatory behavior, please *pay attention rather than ignoring it*: Support affected persons, intervene, or ask the crew for support.',
+          'We do not deny, that kyosk cannot be a completely secure space, but hereby, we want to communicate transparently, which kind of support we can undertake and what we can unfortunately not provide.'
+        ],
+        canHeading: 'WHAT WE CAN SUPPORT WITH:',
+        canIntro: [
+          'You can confide in the crew behind the counter. We will listen and give those affected attention and trust. There is no need to explain yourself!',
+          'We (all) take responsibility for the space, meaning:'
+        ],
+        canList: [
+          'We take care of each other in solidarity. Therefore, we can communicate borders of those affected on their behalf and if necessary and desired, we can communicate a temporary kyosk ban for the specific day/ evening. *The necessity of additional actions will then be decided in the plenary.*',
+          'We have a space in which persons can retreat from unnerving situations.',
+          'We can offer personal communication outside of regular day-to-day kyosk opening hours. Feel free to contact us via our mail-address interym@riseup.net.',
+          'There are non-smoking shyfts - check the status on our website and our channels',
+          'You can give us feedback via multiple channels: Either via e-mail, in our feedback-postbox, or personally.'
+        ],
+        notHeading: 'WHAT WE CANNOT OFFER:',
+        notList: [
+          'We are no professional awareness team.',
+          'We cannot guarantee a sober contact person throughout every shyft.',
+          'We cannot always solve each conflict or decide "who is righteous".',
+          'We cannot guarantee complete protection against abusive or discriminatory behavior.'
+        ],
+        impHeading: 'Attention:',
+        impBody: [
+          'In kyosk, people smoke and consume alcohol and it can get noisy, crowded and chaotic. Apart from that, it smells horrific, *sorry!*',
+          'Awareness can only work in solidarity, therefore take care of each other, respect personal borders, and help persons in necessity of support!'
+        ]
+      },
+      es: {
+        mainHeading: 'Cómo entendemos los cuidados (Awareness)',
+        intro: [
+          'Entendemos los cuidados (Awareness) como una responsabilidad colectiva de todas las personas que están en el Kyosk. Si observas que se sobrepasan los límites de alguien o presencias comportamientos discriminatorios, no mires hacia otro lado: apoya a la persona afectada, señala la situación o avisa al equipo de cuidados (Awareness).',
+          'Somos conscientes de que el Kyosk no puede ser un espacio completamente seguro y queremos ser transparentes sobre lo que podemos ofrecer y también sobre aquello que no podemos garantizar.'
+        ],
+        canHeading: 'LO QUE PODEMOS HACER',
+        canIntro: [
+          'Puedes dirigirte al equipo de cuidados (Awareness) que está detrás de la barra. Te escucharemos y creeremos a las personas afectadas; no tienes que justificarte ni explicar por qué necesitas apoyo.',
+          'Todas las personas compartimos la responsabilidad de cuidar este espacio. Esto significa que:'
+        ],
+        canList: [
+          'Nos apoyamos mutuamente de forma solidaria. Esto puede implicar comunicar límites en nombre de una persona afectada y, si es necesario, pedir a alguien que abandone el Kyosk por el resto de la noche. La adopción de otras medidas se decidirá de forma colectiva en la asamblea.',
+          'Tenemos un espacio de retirada o descanso que podemos abrir para ti si lo necesitas.',
+          'Podemos ofrecer conversaciones personales fuera del horario habitual del Kyosk. Para ello, puedes contactarnos a través del correo electrónico interym@riseup.net.',
+          'Organizamos turnos libres de humo. Consulta el estado del espacio en la página web y en nuestros canales para saber cuándo tienen lugar.',
+          'Puedes hacernos llegar tus comentarios por diferentes vías: por correo electrónico, mediante el buzón de sugerencias o personalmente.'
+        ],
+        notHeading: 'LO QUE NO PODEMOS HACER',
+        notList: [
+          'No somos un equipo profesional de cuidados (Awareness).',
+          'No podemos garantizar que siempre haya una persona de referencia completamente sobria.',
+          'No siempre podremos resolver los conflictos ni decidir quién tiene "la razón".',
+          'No podemos garantizar una protección completa frente a agresiones o situaciones de discriminación.'
+        ],
+        impHeading: 'Importante',
+        impBody: [
+          'En el Kyosk a veces se fuma, se consume alcohol y el ambiente puede ser ruidoso, estar lleno de gente y ser caótico. Además, huele bastante mal. ¡Lo sentimos!',
+          'Los cuidados (Awareness) solo funcionan si los construimos colectivamente. Cuida de las personas que te rodean, respeta los límites de las demás y apoya a quienes necesiten ayuda.'
+        ]
+      }
+    };
+
+    const LANGS = ['de', 'en', 'es'];
+    const STORED_LANG = 'kyosk-lang';   // shared with the feedback page
+    const CREW_MAIL = 'interym@riseup.net';
+
+    let lang = pickLang();
+
+    // A stored choice wins, otherwise the browser's own languages decide, German last resort
+    function pickLang() {
+      try {
+        const saved = localStorage.getItem(STORED_LANG);
+        if (LANGS.indexOf(saved) !== -1) return saved;
+      } catch (e) { /* storage can be switched off */ }
+      const wanted = (navigator.languages || [navigator.language || '']).map(
+        tag => String(tag).slice(0, 2).toLowerCase()
+      );
+      return wanted.find(tag => LANGS.indexOf(tag) !== -1) || 'de';
+    }
+
+    // Turns one poster line into nodes: *stars* become bold, the crew address a mail link.
+    // Everything goes in as text, so nothing in CONTENT can smuggle in markup.
+    function fill(element, line) {
+      element.textContent = '';
+      line.split('*').forEach((piece, index) => {
+        const host = index % 2 ? document.createElement('strong') : element;
+        piece.split(CREW_MAIL).forEach((part, i) => {
+          if (i) {
+            const link = document.createElement('a');
+            link.href = 'mailto:' + CREW_MAIL;
+            link.textContent = CREW_MAIL;
+            host.appendChild(link);
+          }
+          if (part) host.appendChild(document.createTextNode(part));
+        });
+        if (host !== element) element.appendChild(host);
+      });
+    }
+
+    function paragraphs(container, lines) {
+      container.textContent = '';
+      lines.forEach(line => {
+        const p = document.createElement('p');
+        fill(p, line);
+        container.appendChild(p);
+      });
+    }
+
+    function items(list, lines) {
+      list.textContent = '';
+      lines.forEach(line => {
+        const li = document.createElement('li');
+        fill(li, line);
+        list.appendChild(li);
+      });
+    }
+
+    function render() {
+      const text = CONTENT[lang];
+      document.documentElement.lang = lang;
+      document.getElementById('main-heading').textContent = text.mainHeading;
+      document.getElementById('can-heading').textContent = text.canHeading;
+      document.getElementById('not-heading').textContent = text.notHeading;
+      document.getElementById('imp-heading').textContent = text.impHeading;
+      paragraphs(document.getElementById('main-intro'), text.intro);
+      paragraphs(document.getElementById('can-intro'), text.canIntro);
+      paragraphs(document.getElementById('imp-body'), text.impBody);
+      items(document.getElementById('can-list'), text.canList);
+      items(document.getElementById('not-list'), text.notList);
+      [...document.querySelectorAll('#lang-switch button')].forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
+      });
+    }
+
+    document.getElementById('lang-switch').addEventListener('click', event => {
+      const button = event.target.closest('button[data-lang]');
+      if (!button) return;
+      lang = button.dataset.lang;
+      try { localStorage.setItem(STORED_LANG, lang); } catch (e) { /* storage off */ }
+      render();
+    });
+
+    render();
+  </script>
 </body>
 
 </html>
