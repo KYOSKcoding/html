@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html>
 
+<head>
+  <meta charset="utf-8">
+
 
 
       <title>KYOSK</title>
         <!-- embed font -->
           <link rel="stylesheet" media="screen" href="https://fontlibrary.org/en/face/terminal-grotesque" type="text/css" />
             <!-- stylesheet for effects -->
-              <link rel="stylesheet" media="screen" href="effects.css" type="text/css" />
+              <link rel="stylesheet" media="screen" href="../effects.css" type="text/css" />
                 <!-- script for room status -->
-                  <script type="text/javascript" src="raumstatus.js"></script>
+                  <script type="text/javascript" src="../raumstatus.js"></script>
                     <!-- script for pink little cat -->
                       <script>NekoType = "pink"</script>
                         <!-- styling -->
@@ -481,17 +484,299 @@
                                                                                                                                                                                                                                                                         font-size: 1.8rem;
                                                                                                                                                                                                                                                                                   }
                                                                                                                                                                                                                                                                 }
-                                                                                                                                                                                              </style>
-                  </head>
+                                                                                                                                                                                              
+        /* ---- feedback form ---------------------------------------------- */
+        .feedback-article {
+            max-width: 100%;
+        }
 
-                                                                                                                                                                               
-Hi! What do you want for the Kyosk World? 
+        .feedback-form textarea {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            margin: 0.3rem 0 1.4rem 0;
+            padding: 0.4rem;
+            background: transparent;
+            color: black;
+            border: 2px solid black;
+            border-radius: 0;
+            font-family: inherit;
+            font-size: 1.3rem;
+            line-height: 1.2;
+            resize: vertical;
+        }
 
-<article>
-        <p><img src="blackcat.gif" style="mix-blend-mode: multiply;"></p
-</article>
+        .feedback-form textarea:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.4);
+        }
 
- </div>
-     <img src="../dandelion.gif" style="mix-blend-mode: normal;"><img src="../mushroom_net.gif" style="mix-blend-mode: difference;">
+        .feedback-form label {
+            display: block;
+            font-size: 1.5rem;
+        }
+
+        /* the language buttons reuse the nav button styling, but three across,
+           not the two-column grid the nav uses */
+        .lang-switch {
+            grid-template-columns: repeat(3, auto);
+        }
+
+        .lang-switch button[aria-pressed="true"] span {
+            text-decoration: underline;
+        }
+
+        /* like .jam-ascii, but black - that one is green for the dark jam card */
+        .feedback-ascii {
+            margin: 1.5rem 0;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            line-height: 1.15;
+            color: black;
+            white-space: pre;
+            overflow: hidden;
+        }
+
+        .feedback-note {
+            font-size: 1.2rem;
+        }
+
+        .feedback-error {
+            font-weight: bold;
+        }
+
+        /* bait for bots, never shown to people */
+        .feedback-hp {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+        }
+                                                                                              </style>
+</head>
+
+<body>
+  <!-- containers for use in effects.css -->
+  <div class="bg"></div>
+  <div class="bg2"></div>
+
+  <div class="top-row">
+    <div class="headline" id="fb-greeting"></div>
+    <div class="button-container lang-switch" id="fb-langs">
+      <button type="button" data-lang="de"><span class="button-text">DE</span></button>
+      <button type="button" data-lang="en"><span class="button-text">EN</span></button>
+      <button type="button" data-lang="es"><span class="button-text">ES</span></button>
+    </div>
+  </div>
+
+  <div class="flexhex">
+    <article class="feedback-article">
+      <p class="rainbow-text2">*. ⋅ ˚̣- : ✧ : – ⭒ ⊹ ⭒ – : ✧ : -˚̣⋅ .*</p>
+
+      <p class="rainbow-text" id="fb-title"></p>
+      <p id="fb-intro"></p>
+
+      <pre class="feedback-ascii" aria-hidden="true"> ___       ____       ____
+|YOU|--o--|FORM|=====|MAIL|=====&gt;((o)) kyosk crew
+|___|     |____|     |____|</pre>
+
+      <form class="feedback-form" id="fb-form" autocomplete="off">
+        <div id="fb-questions"></div>
+
+        <!-- bots fill this in, people never see it -->
+        <div class="feedback-hp" aria-hidden="true">
+          <label>Website<input type="text" name="website" id="fb-hp" tabindex="-1" autocomplete="off"></label>
+        </div>
+
+        <p class="rainbow-text2">*. ⋅ ˚̣- : ✧ : – ⭒ ⊹ ⭒ – : ✧ : -˚̣⋅ .*</p>
+
+        <button type="submit" id="fb-submit"><span class="button-text"></span></button>
+        <p class="feedback-note" id="fb-note"></p>
+        <p class="feedback-error" id="fb-error"></p>
+      </form>
+
+      <div id="fb-done" hidden>
+        <p class="rainbow-text" id="fb-thanks"></p>
+        <pre class="feedback-ascii" aria-hidden="true">  _______________________
+ |\                     /|
+ | \___________________/ |
+ |                       |
+ |_______________________|</pre>
+      </div>
+    </article>
+
+    <article>
+      <p><img src="blackcat.gif" style="mix-blend-mode: multiply;"></p>
+    </article>
+  </div>
+
+  <img src="../dandelion.gif" style="mix-blend-mode: normal;"><img src="../mushroom_net.gif"
+    style="mix-blend-mode: difference;">
+
+  <script>
+    // Everything the page says, in one place: swapping the questionnaire later means
+    // editing this object and nothing else. The German is the wording of the original
+    // Nextcloud form, word for word; English and Spanish are translations of it.
+    const CONTENT = {
+      de: {
+        greeting: 'Hi! Was w\u00fcnschst du dir f\u00fcr die Kyosk-Welt?',
+        title: 'Feedback zu Erfahrungen im kyosk',
+        intro: 'Um die Barrieren, welche Menschen am Besuchen des kyosk, hindert, sammeln wir Feedback bzgl. Erfahrungen und Anregungen, wie wir besser damit umgehen k\u00f6nnen.',
+        questions: [
+          'Was hindert dich daran, in den kyosk zu gehen? Welche Hindernisse gibt es?',
+          'Was braucht die kyosk-Crew von dir, damit du dich sicherer f\u00fchlst? Was k\u00f6nnen wir tun, damit es dir bei uns besser geht?',
+          'Was findest du bzgl. Wohlbefinden bereits gut? Welche Strukturen sollen wir beibehalten?',
+          'W\u00fcrdest du uns sonst gerne noch etwas mitteilen?'
+        ],
+        note: 'Alle Fragen sind freiwillig. Es geht anonym an die kyosk-Crew - wir fragen nicht nach Namen oder Adresse.',
+        submit: 'abschicken',
+        sending: 'wird geschickt ...',
+        thanks: 'Danke! Dein Feedback ist bei der kyosk-Crew.',
+        empty: 'Schreib bitte erst in eines der Felder etwas rein.',
+        failed: 'Das hat nicht geklappt - bitte sp\u00e4ter nochmal versuchen.'
+      },
+      en: {
+        greeting: 'Hi! What do you want for the Kyosk World?',
+        title: 'Feedback on experiences at the kyosk',
+        intro: 'To understand the barriers that keep people from coming to the kyosk, we are collecting feedback about experiences, and suggestions for how we can deal with them better.',
+        questions: [
+          'What keeps you from going to the kyosk? What barriers are there?',
+          'What does the kyosk crew need from you so that you feel safer? What can we do so that you are better off with us?',
+          'What do you already find good when it comes to wellbeing? Which structures should we keep?',
+          'Is there anything else you would like to tell us?'
+        ],
+        note: 'Every question is optional. It goes to the kyosk crew anonymously - we do not ask for a name or an address.',
+        submit: 'send',
+        sending: 'sending ...',
+        thanks: 'Thank you! Your feedback reached the kyosk crew.',
+        empty: 'Please write something in one of the fields first.',
+        failed: 'That did not work - please try again later.'
+      },
+      es: {
+        greeting: '\u00a1Hola! \u00bfQu\u00e9 deseas para el mundo del Kyosk?',
+        title: 'Comentarios sobre experiencias en el kyosk',
+        intro: 'Para entender las barreras que impiden a las personas venir al kyosk, recogemos comentarios sobre experiencias y sugerencias de c\u00f3mo podemos manejarlas mejor.',
+        questions: [
+          '\u00bfQu\u00e9 te impide ir al kyosk? \u00bfQu\u00e9 barreras hay?',
+          '\u00bfQu\u00e9 necesita de ti el equipo del kyosk para que te sientas con m\u00e1s seguridad? \u00bfQu\u00e9 podemos hacer para que te sientas mejor en el kyosk?',
+          '\u00bfQu\u00e9 te parece que ya est\u00e1 bien en cuanto al bienestar? \u00bfQu\u00e9 estructuras deber\u00edamos mantener?',
+          '\u00bfHay algo m\u00e1s que quieras contarnos?'
+        ],
+        note: 'Todas las preguntas son opcionales. Llega al equipo del kyosk de forma an\u00f3nima: no pedimos ni nombre ni direcci\u00f3n.',
+        submit: 'enviar',
+        sending: 'enviando ...',
+        thanks: '\u00a1Gracias! Tu comentario lleg\u00f3 al equipo del kyosk.',
+        empty: 'Escribe algo en uno de los campos primero.',
+        failed: 'No ha funcionado - int\u00e9ntalo de nuevo m\u00e1s tarde.'
+      }
+    };
+
+    // Apache serves this page; only /kyosky is proxied to the application
+    const API_URL = '/kyosky/api/feedback';
+    const LANGS = ['de', 'en', 'es'];
+    const STORED_LANG = 'kyosk-feedback-lang';
+
+    let lang = pickLang();
+
+    // A stored choice wins, otherwise the browser's own languages decide, German last resort
+    function pickLang() {
+      try {
+        const saved = localStorage.getItem(STORED_LANG);
+        if (LANGS.indexOf(saved) !== -1) return saved;
+      } catch (e) { /* storage can be switched off */ }
+      const wanted = (navigator.languages || [navigator.language || '']).map(
+        tag => String(tag).slice(0, 2).toLowerCase()
+      );
+      return wanted.find(tag => LANGS.indexOf(tag) !== -1) || 'de';
+    }
+
+    function answers() {
+      return [...document.querySelectorAll('#fb-questions textarea')].map(box => box.value);
+    }
+
+    // Re-renders in `lang`, carrying anything already typed across the switch
+    function render(typed) {
+      const text = CONTENT[lang];
+      document.documentElement.lang = lang;
+      document.getElementById('fb-greeting').textContent = text.greeting;
+      document.getElementById('fb-title').textContent = text.title;
+      document.getElementById('fb-intro').textContent = text.intro;
+      document.getElementById('fb-note').textContent = text.note;
+      document.querySelector('#fb-submit span').textContent = text.submit;
+      document.getElementById('fb-thanks').textContent = text.thanks;
+      document.getElementById('fb-error').textContent = '';
+
+      const box = document.getElementById('fb-questions');
+      box.innerHTML = '';
+      text.questions.forEach((question, index) => {
+        const label = document.createElement('label');
+        label.setAttribute('for', 'fb-q' + index);
+        label.textContent = question;
+        const field = document.createElement('textarea');
+        field.id = 'fb-q' + index;
+        field.rows = 4;
+        field.value = (typed && typed[index]) || '';
+        box.appendChild(label);
+        box.appendChild(field);
+      });
+
+      [...document.querySelectorAll('#fb-langs button')].forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
+      });
+    }
+
+    document.getElementById('fb-langs').addEventListener('click', event => {
+      const button = event.target.closest('button[data-lang]');
+      if (!button) return;
+      lang = button.dataset.lang;
+      try { localStorage.setItem(STORED_LANG, lang); } catch (e) { /* storage off */ }
+      render(answers());
+    });
+
+    document.getElementById('fb-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      const text = CONTENT[lang];
+      const error = document.getElementById('fb-error');
+      const submit = document.getElementById('fb-submit');
+      const written = answers();
+      error.textContent = '';
+
+      if (!written.some(value => value.trim())) {
+        error.textContent = text.empty;
+        return;
+      }
+
+      submit.disabled = true;
+      submit.querySelector('span').textContent = text.sending;
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lang: lang,
+            answers: written,
+            questions: text.questions,
+            website: document.getElementById('fb-hp').value
+          })
+        });
+        // a proxy may answer with its own HTML, so do not assume this parses
+        const body = await response.text();
+        let data = {};
+        try { data = JSON.parse(body); } catch (e) { /* keep the empty object */ }
+        if (!response.ok || !data.success) throw new Error(data.error || response.status);
+        document.getElementById('fb-form').hidden = true;
+        document.getElementById('fb-done').hidden = false;
+      } catch (e) {
+        console.error('feedback failed:', e);
+        error.textContent = text.failed;
+        submit.disabled = false;
+        submit.querySelector('span').textContent = text.submit;
+      }
+    });
+
+    render();
+  </script>
+</body>
 
 </html>

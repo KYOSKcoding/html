@@ -19,6 +19,9 @@ import threading
 import time
 import queue as _queue
 import random
+import hashlib
+from datetime import datetime
+from email.message import EmailMessage
 
 try:
     from mutagen.mp3 import MP3 as _MP3
@@ -1739,6 +1742,110 @@ def _scheduler_loop(interval_minutes=10):
 
 
 _init_scheduler = False
+
+
+# ========== Feedback form (/feedback) ==========
+# The page at kyo.sk/feedback posts here and the answers are mailed on. Nothing is kept:
+# no file, no database, and the answers never reach the log - people are being asked what
+# makes them feel unsafe, so the mail is the only copy.
+FEEDBACK_TO = "kyosk.feedback@uber.space"
+FEEDBACK_FROM = "kyosk@uber.space"
+SENDMAIL = "/usr/sbin/sendmail"
+
+FEEDBACK_MAX_ANSWER = 5000  # characters in one answer
+FEEDBACK_MAX_TOTAL = 20000  # characters in one submission
+FEEDBACK_PER_IP_HOUR = 5
+FEEDBACK_TOTAL_HOUR = 40
+
+# (hashed ip, timestamp) of recent submissions, kept in memory only
+FEEDBACK_SENT = []
+FEEDBACK_LOCK = threading.Lock()
+
+
+def _feedback_allowed(remote_addr):
+    """Rate limit per sender and overall. The address is hashed - it is never stored raw."""
+    who = hashlib.sha256((remote_addr or "").encode()).hexdigest()[:16]
+    cutoff = time.time() - 3600
+    with FEEDBACK_LOCK:
+        FEEDBACK_SENT[:] = [entry for entry in FEEDBACK_SENT if entry[1] > cutoff]
+        if len(FEEDBACK_SENT) >= FEEDBACK_TOTAL_HOUR:
+            return False
+        if sum(1 for entry in FEEDBACK_SENT if entry[0] == who) >= FEEDBACK_PER_IP_HOUR:
+            return False
+        FEEDBACK_SENT.append((who, time.time()))
+        return True
+
+
+def _send_feedback_mail(lang, pairs):
+    """Hand the message to the local MTA. On this host /usr/sbin/sendmail is uberspace's
+    own rate-limited wrapper, so this needs no credentials and no SMTP round trip."""
+    body = [f"Feedback von kyo.sk/feedback ({lang})", ""]
+    for question, answer in pairs:
+        body.append(question)
+        body.append(answer.strip() if answer.strip() else "-")
+        body.append("")
+
+    message = EmailMessage()
+    message["From"] = FEEDBACK_FROM
+    message["To"] = FEEDBACK_TO
+    message["Subject"] = f"[kyosk feedback] {datetime.now():%Y-%m-%d %H:%M}"
+    message.set_content("\n".join(body))
+
+    result = subprocess.run(
+        [SENDMAIL, "-t", "-i"],
+        input=message.as_bytes(),
+        capture_output=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"sendmail exited {result.returncode}: {result.stderr.decode(errors='replace')[:200]}"
+        )
+
+
+@app.route("/api/feedback", methods=["POST"])
+@app.route("/kyosky/api/feedback", methods=["POST"])
+def feedback():
+    data = request.json or {}
+
+    # the honeypot is invisible on the page, so anything in it came from a bot: take the
+    # submission politely and drop it
+    if (data.get("website") or "").strip():
+        logger.info("Feedback discarded: honeypot filled")
+        return jsonify({"success": True})
+
+    answers = data.get("answers") or []
+    questions = data.get("questions") or []
+    lang = data.get("lang") if data.get("lang") in ("de", "en", "es") else "de"
+
+    if not isinstance(answers, list) or not any(
+        isinstance(answer, str) and answer.strip() for answer in answers
+    ):
+        return jsonify({"success": False, "error": "empty"}), 400
+
+    answers = [answer for answer in answers if isinstance(answer, str)]
+    if any(len(answer) > FEEDBACK_MAX_ANSWER for answer in answers):
+        return jsonify({"success": False, "error": "answer_too_long"}), 400
+    if sum(len(answer) for answer in answers) > FEEDBACK_MAX_TOTAL:
+        return jsonify({"success": False, "error": "too_long"}), 400
+
+    if not _feedback_allowed(request.remote_addr):
+        logger.warning("Feedback rejected: rate limit reached")
+        return jsonify({"success": False, "error": "rate_limited"}), 429
+
+    questions = [q if isinstance(q, str) else "" for q in questions]
+    questions += [""] * (len(answers) - len(questions))
+    pairs = list(zip(questions[: len(answers)], answers))
+
+    try:
+        _send_feedback_mail(lang, pairs)
+    except Exception as e:
+        # no answer text in the message - only why the send failed
+        logger.error(f"Feedback mail failed: {e}")
+        return jsonify({"success": False, "error": "mail_failed"}), 502
+
+    logger.info(f"Feedback sent ({lang}, {len(answers)} fields)")
+    return jsonify({"success": True})
 
 
 @app.before_request
