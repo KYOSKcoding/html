@@ -112,43 +112,298 @@
         font-size: 1.2rem;
       }
     }
-  </style>
+  
+    .lang-switch {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .lang-switch button {
+      background: none;
+      color: #000;
+      border: 2px solid #000;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    .lang-switch button[aria-pressed="true"] {
+      background: #000;
+      color: #00ff00;
+    }
+
+    /* Arabic and Sorani run the other way */
+    [dir="rtl"] .card ol {
+      padding-left: 0;
+      padding-right: 1.3rem;
+    }
+</style>
 </head>
 
 <body>
-  <div class="back-link">
+  <!-- the chrome is English, so it keeps its direction when the page flips to RTL -->
+  <div class="back-link" dir="ltr">
     <a href="/">[← BACK TO MAIN]</a>
   </div>
 
   <div class="awareness-container">
-    <div class="headline">
+    <div class="lang-switch" id="lang-switch" dir="ltr"></div>
+
+    <div class="headline" dir="ltr">
       Welcome to
       <img src="../kyo_dot_sk_logo_vektorisiert_black.svg" alt="kyo.sk" class="headline-logo">
     </div>
 
     <main>
       <section class="card card-main" aria-labelledby="basics-heading">
-        <h2 id="basics-heading">Kyosk ist ein öffentliches Wohnzimmer*:</h2>
-        <ol>
-          <li>Hier ist kein Raum für Sexismus, Rassismus &amp; jegliche Form der Diskriminierung!
-            <strong>-&gt; alle sollen sich wohlfühlen, daher achtet aufeinander!</strong></li>
-          <li>Kyosk ist und bleibt selbstverwaltet</li>
-          <li>Soliprinzip: nicht gewinnorientiert, Selbstbedienung &amp; Spendenempfehlung statt Konsumzwang, Service
-            &amp; Festpreise - <strong>keine Gastronomie</strong>
-            -&gt;&quot;Lieber gloi zahle, ned später!&quot; Sind auf Spenden angewiesen</li>
-          <li>Bringt Flaschen zurück &amp; nehmt euren Müll mit</li>
-          <li>Bitte akzeptiert, wenn die shychtenden Personen schließen möchten und haltet euch nach 22 Uhr der
-            Nachbar*innen zuliebe nicht vor dem Kyosk auf</li>
-          <li>Gebt uns gerne Feedback über Mail (<a href="mailto:interym@riseup.net">interym@riseup.net</a>) oder in
-            unseren Feedback-Briefkasten</li>
-        </ol>
+        <h2 id="basics-heading"></h2>
+        <ol id="basics-list"></ol>
       </section>
 
       <section class="card card-note">
-        <p>*Öffentliches Wohnzimmer bedeutet, wir öffnen und schließen innerhalb der Öffnungszeiten nach Kapas.</p>
+        <p id="basics-note"></p>
       </section>
     </main>
   </div>
+
+  <script>
+    // The house rules in every language we have. German is the original; the rest are
+    // translations of it. *stars* mark bold, the crew address becomes a mail link.
+    const CONTENT = {
+      de: {
+        name: 'Deutsch',
+        heading: 'Kyosk ist ein öffentliches Wohnzimmer*:',
+        rules: [
+          'Hier ist kein Raum für Sexismus, Rassismus & jegliche Form der Diskriminierung! *-> alle sollen sich wohlfühlen, daher achtet aufeinander!*',
+          'Kyosk ist und bleibt selbstverwaltet',
+          'Soliprinzip: nicht gewinnorientiert, Selbstbedienung & Spendenempfehlung statt Konsumzwang, Service & Festpreise - *keine Gastronomie* -> "Lieber gloi zahle, ned später!" Sind auf Spenden angewiesen',
+          'Bringt Flaschen zurück & nehmt euren Müll mit',
+          'Bitte akzeptiert, wenn die shychtenden Personen schließen möchten und haltet euch nach 22 Uhr der Nachbar*innen zuliebe nicht vor dem Kyosk auf',
+          'Gebt uns gerne Feedback über Mail (interym@riseup.net) oder in unseren Feedback-Briefkasten'
+        ],
+        note: '*Öffentliches Wohnzimmer bedeutet, wir öffnen und schließen innerhalb der Öffnungszeiten nach Kapas.'
+      },
+      en: {
+        name: 'English',
+        heading: 'Kyosk is a public living room*:',
+        rules: [
+          'There is no room here for sexism, racism & any form of discrimination! *-> everyone should feel at ease, so look out for each other!*',
+          'Kyosk is and stays self-organised',
+          'Solidarity principle: not for profit, self-service & a suggested donation instead of an obligation to consume, service & fixed prices - *not a bar or restaurant* -> "Better pay right away, not later!" We depend on donations',
+          'Bring the bottles back & take your rubbish with you',
+          'Please accept it when the people on shyft want to close, and for the neighbours’ sake do not hang around in front of the Kyosk after 10 pm',
+          'Feel free to give us feedback by mail (interym@riseup.net) or in our feedback postbox'
+        ],
+        note: '*Public living room means we open and close within the opening hours depending on capacity.'
+      },
+      es: {
+        name: 'Español',
+        heading: 'El Kyosk es un salón público*:',
+        rules: [
+          '¡Aquí no hay sitio para el sexismo, el racismo ni ninguna forma de discriminación! *-> todo el mundo debe sentirse a gusto, así que ¡cuidémonos entre todas las personas!*',
+          'El Kyosk es y seguirá siendo autogestionado',
+          'Principio solidario: sin ánimo de lucro, autoservicio y donación recomendada en vez de consumo obligatorio, servicio y precios fijos - *no somos un bar* -> "¡Mejor paga enseguida, no más tarde!" Dependemos de las donaciones',
+          'Devuelve las botellas y llévate tu basura',
+          'Por favor, acepta cuando las personas de turno quieran cerrar y, por consideración al vecindario, no te quedes delante del Kyosk después de las 22 h',
+          'Puedes darnos tu opinión por correo (interym@riseup.net) o en nuestro buzón de sugerencias'
+        ],
+        note: '*Salón público significa que abrimos y cerramos dentro del horario según nuestras capacidades.'
+      },
+      pt: {
+        name: 'Português',
+        heading: 'O Kyosk é uma sala de estar pública*:',
+        rules: [
+          'Aqui não há espaço para sexismo, racismo nem qualquer forma de discriminação! *-> todas as pessoas devem sentir-se bem, por isso cuidem umas das outras!*',
+          'O Kyosk é e continuará a ser autogerido',
+          'Princípio solidário: sem fins lucrativos, self-service e donativo sugerido em vez de consumo obrigatório, serviço e preços fixos - *não somos um bar* -> "Melhor pagar já, não depois!" Dependemos de donativos',
+          'Devolve as garrafas e leva o teu lixo contigo',
+          'Por favor, aceita quando as pessoas de turno quiserem fechar e, por consideração pela vizinhança, não fiques à frente do Kyosk depois das 22h',
+          'Dá-nos a tua opinião por e-mail (interym@riseup.net) ou na nossa caixa de sugestões'
+        ],
+        note: '*Sala de estar pública significa que abrimos e fechamos dentro do horário consoante as nossas capacidades.'
+      },
+      fr: {
+        name: 'Français',
+        heading: 'Le Kyosk est un salon public* :',
+        rules: [
+          'Ici, il n’y a pas de place pour le sexisme, le racisme ni aucune forme de discrimination ! *-> tout le monde doit s’y sentir bien, alors prenez soin les un·es des autres !*',
+          'Le Kyosk est et restera autogéré',
+          'Principe solidaire : sans but lucratif, self-service et don recommandé plutôt que consommation obligatoire, service et prix fixes - *ce n’est pas un bar* -> « Mieux vaut payer tout de suite que plus tard ! » Nous dépendons des dons',
+          'Rapportez les bouteilles et emportez vos déchets',
+          'Merci d’accepter quand les personnes de permanence veulent fermer, et par égard pour le voisinage, ne restez pas devant le Kyosk après 22h',
+          'N’hésitez pas à nous faire un retour par mail (interym@riseup.net) ou dans notre boîte à suggestions'
+        ],
+        note: '*Salon public signifie que nous ouvrons et fermons pendant les horaires selon nos capacités.'
+      },
+      it: {
+        name: 'Italiano',
+        heading: 'Il Kyosk è un salotto pubblico*:',
+        rules: [
+          'Qui non c’è spazio per sessismo, razzismo e nessuna forma di discriminazione! *-> tutte le persone devono sentirsi a proprio agio, quindi prendetevi cura le une delle altre!*',
+          'Il Kyosk è e resta autogestito',
+          'Principio solidale: senza scopo di lucro, self-service e donazione consigliata invece dell’obbligo di consumare, servizio e prezzi fissi - *non siamo un bar* -> "Meglio pagare subito che dopo!" Dipendiamo dalle donazioni',
+          'Riportate le bottiglie e portate via i vostri rifiuti',
+          'Per favore accettate quando le persone di turno vogliono chiudere e, per riguardo verso il vicinato, non fermatevi davanti al Kyosk dopo le 22',
+          'Dateci volentieri un riscontro via mail (interym@riseup.net) o nella nostra cassetta dei suggerimenti'
+        ],
+        note: '*Salotto pubblico significa che apriamo e chiudiamo durante gli orari in base alle nostre capacità.'
+      },
+      tr: {
+        name: 'Türkçe',
+        heading: 'Kyosk herkese açık bir oturma odasıdır*:',
+        rules: [
+          'Burada cinsiyetçiliğe, ırkçılığa ve her türlü ayrımcılığa yer yoktur! *-> herkes kendini iyi hissetmeli, bu yüzden birbirinize dikkat edin!*',
+          'Kyosk öz yönetimlidir ve öyle kalacak',
+          'Dayanışma ilkesi: kâr amacı gütmez, tüketim zorunluluğu yerine self servis ve önerilen bağış, servis ve sabit fiyatlar - *burası bir bar değil* -> "Sonra değil, hemen öde!" Bağışlara bağlıyız',
+          'Şişeleri geri getirin ve çöpünüzü yanınızda götürün',
+          'Lütfen vardiyadaki kişiler kapatmak istediğinde bunu kabul edin ve komşular için saat 22’den sonra Kyosk’un önünde durmayın',
+          'Geri bildiriminizi e-posta (interym@riseup.net) ya da öneri kutumuz aracılığıyla iletebilirsiniz'
+        ],
+        note: '*Herkese açık oturma odası, açılış saatleri içinde kapasitemize göre açıp kapattığımız anlamına gelir.'
+      },
+      ar: {
+        name: 'العربية',
+        dir: 'rtl',
+        heading: 'الكيوسك غرفة معيشة عامة*:',
+        rules: [
+          'لا مكان هنا للتمييز الجنسي أو العنصرية أو أي شكل من أشكال التمييز! *على الجميع أن يشعروا بالارتياح، لذلك انتبهوا لبعضكم البعض!*',
+          'الكيوسك مُدار ذاتيًا وسيبقى كذلك',
+          'مبدأ التضامن: لا نهدف إلى الربح، خدمة ذاتية وتبرع مقترح بدلاً من إلزام الاستهلاك، خدمة وأسعار ثابتة - *لسنا مقهى أو مطعمًا* "ادفع فورًا، لا لاحقًا!" نعتمد على التبرعات',
+          'أعيدوا الزجاجات وخذوا نفاياتكم معكم',
+          'من فضلكم تقبّلوا رغبة العاملين في الإغلاق، ومراعاةً للجيران لا تبقوا أمام الكيوسك بعد الساعة العاشرة مساءً',
+          'يسعدنا تلقّي ملاحظاتكم عبر البريد الإلكتروني (interym@riseup.net) أو في صندوق الاقتراحات'
+        ],
+        note: '*غرفة معيشة عامة تعني أننا نفتح ونغلق ضمن أوقات الدوام بحسب إمكانياتنا.'
+      },
+      ckb: {
+        name: 'کوردی',
+        dir: 'rtl',
+        heading: 'کیۆسک ژووری دانیشتنی گشتییە*:',
+        rules: [
+          'لێرەدا شوێن نییە بۆ ڕەگەزپەرستی، نەژادپەرستی و هیچ جۆرێک لە جیاکاری! *دەبێت هەموو کەس هەست بە ئاسوودەیی بکات، بۆیە ئاگاداری یەکتر بن!*',
+          'کیۆسک خۆبەڕێوەبەرە و بە هەمان شێوە دەمێنێتەوە',
+          'بنەمای پشتیوانی: مەبەستی قازانج نییە، خۆخزمەتکردن و بەخشینی پێشنیارکراو لە جیاتی ناچارکردن بە خواردنەوە، خزمەتگوزاری و نرخی جێگیر - *مەیخانە نین* "باشترە یەکسەر بدەیت، نەک دواتر!" پشت بە بەخشین دەبەستین',
+          'شووشەکان بگەڕێننەوە و خۆڵەکەتان لەگەڵ خۆتان ببەن',
+          'تکایە ڕازی بن کاتێک ئەو کەسانەی نۆرەیان هەیە دەیانەوێت دادخەن، و لە پێناو دراوسێکان دوای کاتژمێر ١٠ی شەو لەبەردەم کیۆسک نەمێننەوە',
+          'بە خۆشحاڵییەوە ڕای خۆتان بە ئیمەیل (interym@riseup.net) یان لە سندوقی پێشنیارەکان بنێرن'
+        ],
+        note: '*ژووری دانیشتنی گشتی واتە لە ماوەی کاتەکانی کردنەوەدا بەپێی توانامان دەکەینەوە و دادەخەین.'
+      },
+      zh: {
+        name: '繁體中文',
+        heading: 'Kyosk 是一間公共客廳*：',
+        rules: [
+          '這裡不容許性別歧視、種族歧視和任何形式的歧視！*-> 希望大家都能自在，所以請互相照應！*',
+          'Kyosk 現在是、將來也會是自主管理的',
+          '互助原則：不以營利為目的，自助取用、建議捐款而非強制消費，服務與固定價格 - *這裡不是餐飲店* -> 「最好馬上付，別等以後！」我們仰賴捐款',
+          '請把瓶子拿回來，並帶走自己的垃圾',
+          '當值班的人想打烊時請體諒，並為了鄰居著想，晚上十點後請勿在 Kyosk 門前透留',
+          '歡迎透過電子郵件（interym@riseup.net）或我們的意見箱給我們回饋'
+        ],
+        note: '*公共客廳的意思是，我們在營業時間內依照人力狀況開門和關門。'
+      },
+      ja: {
+        name: '日本語',
+        heading: 'Kyoskは公共のリビングルームです*：',
+        rules: [
+          'ここに性差別・人種差別、いかなる形の差別の居場所もありません！*-> みんなが心地よく過ごせるように、お互いを気にかけてください！*',
+          'Kyoskは自主運営であり、これからもそうあり続けます',
+          '連帯の原則：営利目的ではなく、セルフサービスと、消費の強制ではなく寄付のお願い、サービスと固定価格 - *飲食店ではありません* -> 「あとでより、今すぐ払うほうがいい！」寄付に支えられています',
+          '空き瓶は返却し、ごみは持ち帰ってください',
+          'シフトの人が閉めたいときは受け入れてください。近隣の方のために、22時以降はKyoskの前にとどまらないでください',
+          'フィードバックはメール（interym@riseup.net）または意見箱へお気軽にどうぞ'
+        ],
+        note: '*公共のリビングルームとは、営業時間内で人手の状況に応じて開けたり閉めたりするという意味です。'
+        }
+    };
+
+    const LANGS = ['de', 'en', 'es', 'pt', 'fr', 'it', 'tr', 'ar', 'ckb', 'zh', 'ja'];
+    const STORED_LANG = 'kyosk-lang';   // shared with the awareness and feedback pages
+    const CREW_MAIL = 'interym@riseup.net';
+
+    let lang = pickLang();
+
+    // A stored choice wins, otherwise the browser's own languages decide, German last resort
+    function pickLang() {
+      try {
+        const saved = localStorage.getItem(STORED_LANG);
+        if (LANGS.indexOf(saved) !== -1) return saved;
+      } catch (e) { /* storage can be switched off */ }
+      for (const tag of (navigator.languages || [navigator.language || ''])) {
+        const code = String(tag).toLowerCase();
+        // ckb before the two-letter check, it is the only three-letter code here
+        if (code.startsWith('ckb')) return 'ckb';
+        const short = code.slice(0, 2);
+        if (LANGS.indexOf(short) !== -1) return short;
+      }
+      return 'de';
+    }
+
+    // Turns one line into nodes: *stars* become bold, the crew address a mail link.
+    // Everything goes in as text, so nothing in CONTENT can smuggle in markup.
+    function fill(element, line) {
+      element.textContent = '';
+      line.split('*').forEach((piece, index) => {
+        const host = index % 2 ? document.createElement('strong') : element;
+        piece.split(CREW_MAIL).forEach((part, i) => {
+          if (i) {
+            const link = document.createElement('a');
+            link.href = 'mailto:' + CREW_MAIL;
+            link.textContent = CREW_MAIL;
+            host.appendChild(link);
+          }
+          if (part) host.appendChild(document.createTextNode(part));
+        });
+        if (host !== element) element.appendChild(host);
+      });
+    }
+
+    function render() {
+      const text = CONTENT[lang];
+      document.documentElement.lang = lang;
+      document.documentElement.dir = text.dir || 'ltr';
+      document.getElementById('basics-heading').textContent = text.heading;
+      fill(document.getElementById('basics-note'), text.note);
+
+      const list = document.getElementById('basics-list');
+      list.textContent = '';
+      text.rules.forEach(rule => {
+        const item = document.createElement('li');
+        fill(item, rule);
+        list.appendChild(item);
+      });
+
+      [...document.querySelectorAll('#lang-switch button')].forEach(button => {
+        button.setAttribute('aria-pressed', String(button.dataset.lang === lang));
+      });
+    }
+
+    // the switcher names each language in that language, so it can be found without
+    // knowing any of the others
+    const switcher = document.getElementById('lang-switch');
+    LANGS.forEach(code => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.lang = code;
+      button.lang = code;
+      button.textContent = CONTENT[code].name;
+      switcher.appendChild(button);
+    });
+
+    switcher.addEventListener('click', event => {
+      const button = event.target.closest('button[data-lang]');
+      if (!button) return;
+      lang = button.dataset.lang;
+      try { localStorage.setItem(STORED_LANG, lang); } catch (e) { /* storage off */ }
+      render();
+    });
+
+    render();
+  </script>
 </body>
 
 </html>
