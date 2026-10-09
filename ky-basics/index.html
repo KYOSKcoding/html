@@ -5,11 +5,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ky-Basics - kyo.sk</title>
+  <!-- embed font -->
+  <link rel="stylesheet" media="screen" href="https://fontlibrary.org/en/face/terminal-grotesque" type="text/css" />
+  <!-- stylesheet for effects -->
+  <link rel="stylesheet" media="screen" href="../effects.css" type="text/css" />
   <style>
     body {
       background: #00ff00;
       color: #000;
-      font-family: 'Liberation Mono', 'Courier New', monospace;
+      font-family: 'TerminalGrotesqueOpenRegular', monospace;
+      font-size: 1.2rem;
       margin: 0;
       padding: 2rem 1rem;
       line-height: 1.5;
@@ -145,6 +150,10 @@
 </head>
 
 <body>
+  <!-- containers for use in effects.css -->
+  <div class="bg"></div>
+  <div class="bg2"></div>
+
   <!-- the chrome is English, so it keeps its direction when the page flips to RTL -->
   <div class="back-link" dir="ltr">
     <a href="/">[← BACK TO MAIN]</a>
@@ -186,7 +195,7 @@
           'Kyosk ist und bleibt selbstverwaltet',
           'Soliprinzip: nicht gewinnorientiert, Selbstbedienung & Spendenempfehlung statt Konsumzwang, Service & Festpreise - *keine Gastronomie* -> "Lieber gloi zahle, ned später!" Sind auf Spenden angewiesen',
           'Bringt Flaschen zurück & nehmt euren Müll mit',
-          'Bitte akzeptiert, wenn die shychtenden Personen schließen möchten und haltet euch nach 22 Uhr der Nachbar*innen zuliebe nicht vor dem Kyosk auf',
+          'Bitte akzeptiert, wenn die shychtenden Personen schließen möchten und haltet euch nach 22 Uhr der Nachbar:innen zuliebe nicht vor dem Kyosk auf',
           'Gebt uns gerne Feedback über Mail (interym@riseup.net) oder in unseren Feedback-Briefkasten'
         ],
         note: '*Öffentliches Wohnzimmer bedeutet, wir öffnen und schließen innerhalb der Öffnungszeiten nach Kapas.'
