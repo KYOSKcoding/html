@@ -6,559 +6,559 @@
 
 
 
-      <title>KYOSK</title>
-        <!-- embed font -->
-          <link rel="stylesheet" media="screen" href="https://fontlibrary.org/en/face/terminal-grotesque" type="text/css" />
-            <!-- stylesheet for effects -->
-              <link rel="stylesheet" media="screen" href="../effects.css" type="text/css" />
-                <!-- script for room status -->
-                  <script type="text/javascript" src="../raumstatus.js"></script>
-                    <!-- script for pink little cat -->
-                      <script>NekoType = "pink"</script>
-                        <!-- styling -->
-                          <style>
+  <title>KYOSK</title>
+  <!-- embed font -->
+  <link rel="stylesheet" media="screen" href="https://fontlibrary.org/en/face/terminal-grotesque" type="text/css" />
+  <!-- stylesheet for effects -->
+  <link rel="stylesheet" media="screen" href="../effects.css" type="text/css" />
+  <!-- script for room status -->
+  <script type="text/javascript" src="../raumstatus.js"></script>
+  <!-- script for pink little cat -->
+  <script>NekoType = "pink"</script>
+  <!-- styling -->
+  <style>
     body {
-              background: #08ff08;
-                        color: black;
-                                  font-family: 'TerminalGrotesqueOpenRegular', monospace;
-                                            font-size: 2rem;
-                                                      margin: 0;
-                                                                padding: 3rem;
-                                                                        }
-    
-        a {
-                  color: black;
-                          }
-        
-            img {
-                      max-width: 80rem;
-                              }
-            
-                small {
-                          font-size: 1.2rem;
-                                    color: #252;
-                                            }
-                
-                    .headline {
-                              font-size: 4rem;
-                                        font-weight: 600;
-                                                }
-                    
-                        .headline-logo {
-                                  height: 1.5em;
-                                            /* match text height */
-                                            width: auto;
-                                                      vertical-align: -0.12em;
-                                                                /* fine baseline tweak */
-                                                              }
-                        
-                            .headline small {
-                                      font-size: 2rem;
-                                                color: inherit;
-                                                        }
-                            
-                                #room-status {
-                                          color: #252;
-                                                    text-decoration: underline wavy;
-                                                            }
-                                
-                                    #room-status.open {
-                                              color: hsl(285 100% 40%);
-                                                        text-decoration-color: hsl(285 100% 26%);
-                                                                  font-size: 3rem;
-                                                                            text-decoration: none;
-                                                                                    }
-                                    
-                                        /* Start https://www.cursors-4u.com */
-                                        * {
-                                                  cursor: url(https://ani.cursors-4u.net/smiley/smi-3/smi319.cur), auto !important;
-                                                          }
-                                        
-                                            /* End https://www.cursors-4u.com */
-                                            /*max-width: 800px;*/
-                                            .news-container {
-                                                      padding: 0;
-                                                                background: pink;
-                                                                          background: linear-gradient(0deg, pink 50%, PaleTurquoise 100%);
-                                                                                    box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
-                                                                                              text-align: left;
-                                                                                                        font-family: 'TerminalGrotesqueOpenRegular', monospace !important;
-                                                                                                                  border-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAqCAYAAADFw8lbAAAAAXNSR0IArs4c6QAAA05JREFUWEe9WVmWHDEIs+9/6JrnDSMQNp55SX8knWovQoitUkv71FLqV8rX/+E+X19Qvvln/ws+49fnT9+i9u5zyYHuUg7U4bqgiqADI9a2qunQJ7TvGqgwN1AAi2D6RHkz0gGZ+1LkW6YPQK+ubPQETu/Pn4H607oHatOVAarBCaNNvorjUI51av2bal5nOwYnIOuRiOm+7gBUQD8dKBTXUmeAIgChrUkSfvoD0C1TTbUmuD0nLk65XpiaBxCg/Zw/MIoGZLVopZDzVBOUTZC5aDYZN3LxzpGBVrXraVAOePXrOd7kIImZU8hjop4WOwnsux3QIJjsneApZkqUH1P5z+cNLD+EgdR9T0D14h28ufp52DuA+gWDGEt/yxUs4ZEeQDFAr79WCqlQVJpuey+tmTxqd0auygJc62IpobtcerIHBNHqu6c8QqDwmNZm+2JcjxZAQveSMBXl6j6WWLppt/wLvYQWsoh36FKj799tRfLhTPvasNntV8w0icC3bbSOG6C604uAaqwRtSHlyvBxvlkpjEbBtBrYqOfHqD+MBpF2J6BjE2LzMYt6EkRgq4t6z1n05BhMCxtNf1qj/yHqgeNEMO31vwDq+sgwO10SgopX6DFc0FqN2jp21ChmtHwmVRPvTaMruN0oQrsXAkgqxaJEM5f5LiXU3Dj32hiR+47tlSqzJI9eO6MD1ZIuSPDCtgXUKcn2gWu440AplKeozwJ1N11momQwXSIJS2hfvAGPvZAGzWzeVySGt4fgiZcqz2mgThKQEliTcCosz0hJkCXavI1RM5ocNf6F608xp6dQ6FFEK7dsgLvI6527TNGrZv3DcIc7k4z/ShVsk9y3KlNUc6P3prcabS/t76TK514jQFRD+zt66gegnJxHoEPTZHhcBvD6ZCYAbZUBAMVTH4bpq1Vi3Cn50GiOlkYl9H0OblxTqDy9NQnLO8EIYQyr5ZORZs822qXo+vjtuqv1V6BRMzGfK8ZMpeESsq4/3j8OF7HTJoNaTqr5et95q2wLdoLRbTDVaJT/Is3t0twxauOPaSeZyNKuH+cRCpcUvAHHVD8ZJ2Zz5zugkYGr017/FyUb/1YB3PhqpQB4jj8GwRPs2W8TkgbEhYZQ9gPxQXU7A0FWUQAAAABJRU5ErkJggg==') 14 / 14px / 0 round;
-                                                                                                                            border-width: 14px;
-                                                                                                                                      border-style: solid;
-                                                                                                                                              }
-                                            
-                                                iframe {
-                                                          width: 100%;
-                                                                    height: 300px;
-                                                                              /* Adjust as needed */
-                                                                              border: none;
-                                                                                      }
-                                                
-                                                    a:hover img {
-                                                              filter: invert(100%);
-                                                                      }
-                                                    
-                                                        .rainbow-text {
-                                                                  background-image: linear-gradient(to right,
-                                                                                #ff0000, #ff6b6b, #ff7f00, #ffff00,
-                                                                                          #0000ff, #0000ff, #7f00ff, #ff007f);
-                                                                                            background-size: 200% auto;
-                                                                                                      -webkit-background-clip: text;
-                                                                                                                background-clip: text;
-                                                                                                                          color: transparent;
-                                                                                                                                    font-weight: bold;
-                                                                                                                                              animation: gradient-animation 5s ease infinite;
-                                                                                                                                                      }
-                                                        
-                                                            .rainbow-text2 {
-                                                                      background-image: linear-gradient(to right,
-                                                                                    HotPink, HotPink, HotPink, #08ff08, #08ff08, #08ff08, Black, Black, Black);
-                                                                                      background-size: 50% auto;
-                                                                                                -webkit-background-clip: text;
-                                                                                                          background-clip: text;
-                                                                                                                    color: transparent;
-                                                                                                                              font-weight: bold;
-                                                                                                                                        animation: gradient-animation 15s ease infinite;
-                                                                                                                                                }
-                                                            
-                                                                @keyframes gradient-animation {
-                                                                          0% {
-                                                                                      background-position: 0% 50%;
-                                                                                                }
-                                                                          
-                                                                                50% {
-                                                                                            background-position: 100% 50%;
-                                                                                                      }
-                                                                                
-                                                                                      100% {
-                                                                                                  background-position: 0% 50%;
-                                                                                                            }
-                                                                                          }
-                                                                
-                                                                    .flexhex {
-                                                                              width: 100%;
-                                                                                        display: inline-flex;
-                                                                                                  flex-direction: row;
-                                                                                                            flex-wrap: wrap;
-                                                                                                                      justify-content: flex-start;
-                                                                                                                                align-items: normal;
-                                                                                                                                          box-sizing: border-box;
-                                                                                                                                                    -moz-box-sizing: border-box;
-                                                                                                                                                              -webkit-box-sizing: border-box;
-                                                                                                                                                                      }
-                                                                    
-                                                                        article {
-                                                                                  margin-bottom: 1rem;
-                                                                                            max-width: 48%;
-                                                                                                    }
-                                                                        
-                                                                            @media screen and (max-width: 600px) {
-                                                                                      body {
-                                                                                                  font-size: 6rem;
-                                                                                                              padding: 0;
-                                                                                                                        }
-                                                                                      
-                                                                                            img {
-                                                                                                        max-width: 100%;
-                                                                                                                  }
-                                                                                            
-                                                                                                  article {
-                                                                                                              width: 100% !important;
-                                                                                                                          max-width: 100% !important;
-                                                                                                                                    }
-                                                                                                  
-                                                                                                        small {
-                                                                                                                    font-size: 3rem;
-                                                                                                                              }
-                                                                                                        
-                                                                                                              .headline {
-                                                                                                                          font-size: 8rem;
-                                                                                                                                    }
-                                                                                                              
-                                                                                                                    .headline small {
-                                                                                                                                font-size: 6rem;
-                                                                                                                                          }
-                                                                                                                    
-                                                                                                                          .top-row {
-                                                                                                                                      flex-direction: column;
-                                                                                                                                                }
-                                                                                                                          
-                                                                                                                                .button-container {
-                                                                                                                                            margin: 1rem 0 0 0;
-                                                                                                                                                      }
-                                                                                                                                
-                                                                                                                                      button {
-                                                                                                                                                  font-size: 2rem;
-                                                                                                                                                            }
-                                                                                                                                          }
-                                                                            
-                                                                                /* Header row: headline + nav buttons */
-                                                                                .top-row {
-                                                                                          display: flex;
-                                                                                                    flex-wrap: wrap;
-                                                                                                              justify-content: space-between;
-                                                                                                                        align-items: flex-start;
-                                                                                                                                  gap: 1rem;
-                                                                                                                                          }
-                                                                                
-                                                                                    /* Button Styling */
-                                                                                    .button-container {
-                                                                                              display: grid;
-                                                                                                        grid-template-columns: repeat(2, auto);
-                                                                                                                  gap: 8px;
-                                                                                                                            margin: 0 0 0 auto;
-                                                                                                                                    }
-                                                                                    
-                                                                                        button {
-                                                                                                  background-color: limegreen;
-                                                                                                            color: black;
-                                                                                                                      border: 2px solid pink;
-                                                                                                                                padding: 10px 20px;
-                                                                                                                                          font-size: 0.8em;
-                                                                                                                                                    font-family: 'TerminalGrotesqueOpenRegular', monospace !important;
-                                                                                                                                                              cursor: pointer;
-                                                                                                                                                                        margin: 0;
-                                                                                                                                                                                }
-                                                                                        
-                                                                                            button:hover {
-                                                                                                      background-color: black;
-                                                                                                                color: limegreen;
-                                                                                                                        }
-                                                                                            
-                                                                                                button:hover span {
-                                                                                                          color: limegreen;
-                                                                                                                    mix-blend-mode: normal;
-                                                                                                                            }
-                                                                                                
-                                                                                                    .jam-flyer {
-                                                                                                              width: 100%;
-                                                                                                                        max-width: 420px;
-                                                                                                                                  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-                                                                                                                                            border: 2px solid #00ff00;
-                                                                                                                                                      border-radius: 12px;
-                                                                                                                                                                padding: 1.6rem 1.4rem;
-                                                                                                                                                                          box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
-                                                                                                                                                                                    color: #00ff00;
-                                                                                                                                                                                              font-family: 'Courier New', monospace;
-                                                                                                                                                                                                        box-sizing: border-box;
-                                                                                                                                                                                                                  text-align: center;
-                                                                                                                                                                                                                          }
-                                                                                                    
-                                                                                                        .jam-flyer h2 {
-                                                                                                                  margin: 0 0 1rem 0;
-                                                                                                                            font-size: 1.6rem;
-                                                                                                                                      line-height: 1.1;
-                                                                                                                                                letter-spacing: 2px;
-                                                                                                                                                          text-shadow: 0 0 10px #00ff00;
-                                                                                                                                                                    font-weight: bold;
-                                                                                                                                                                            }
-                                                                                                        
-                                                                                                            .jam-live-dot {
-                                                                                                                      width: 110px;
-                                                                                                                                height: 110px;
-                                                                                                                                          margin: 0.6rem auto 1rem;
-                                                                                                                                                    border-radius: 50%;
-                                                                                                                                                              border: 3px solid #ff4444;
-                                                                                                                                                                        background: radial-gradient(circle at 30% 30%, rgba(255, 68, 68, 0.5), rgba(0, 0, 0, 0.9));
-                                                                                                                                                                                  box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
-                                                                                                                                                                                            color: #ff4444;
-                                                                                                                                                                                                      display: flex;
-                                                                                                                                                                                                                align-items: center;
-                                                                                                                                                                                                                          justify-content: center;
-                                                                                                                                                                                                                                    font-weight: bold;
-                                                                                                                                                                                                                                              font-size: 1.4rem;
-                                                                                                                                                                                                                                                        letter-spacing: 3px;
-                                                                                                                                                                                                                                                                  text-shadow: 0 0 10px #ff4444, 0 0 20px #ff0000;
-                                                                                                                                                                                                                                                                            animation: jam-live-pulse 2s ease-in-out infinite;
-                                                                                                                                                                                                                                                                                    }
-                                                                                                            
-                                                                                                                @keyframes jam-live-pulse {
-                                                                                                                    
-                                                                                                                          0%,
-                                                                                                                                100% {
-                                                                                                                                            box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
-                                                                                                                                                      }
-                                                                                                                                
-                                                                                                                                      50% {
-                                                                                                                                                  box-shadow: 0 0 45px rgba(255, 68, 68, 1), inset 0 0 25px rgba(255, 68, 68, 0.6);
-                                                                                                                                                            }
-                                                                                                                                          }
-                                                                                                                
-                                                                                                                    .jam-date {
-                                                                                                                              font-size: 1.4rem;
-                                                                                                                                        font-weight: bold;
-                                                                                                                                                  letter-spacing: 2px;
-                                                                                                                                                            margin: 0.4rem 0 0.2rem;
-                                                                                                                                                                      text-shadow: 0 0 6px #00ff00;
-                                                                                                                                                                              }
-                                                                                                                    
-                                                                                                                        .jam-sub {
-                                                                                                                                  font-size: 0.95rem;
-                                                                                                                                            color: #00aa00;
-                                                                                                                                                      letter-spacing: 2px;
-                                                                                                                                                                text-transform: uppercase;
-                                                                                                                                                                          margin-bottom: 0.3rem;
-                                                                                                                                                                                  }
-                                                                                                                        
-                                                                                                                            .jam-url {
-                                                                                                                                      margin-bottom: 1.1rem;
-                                                                                                                                              }
-                                                                                                                            
-                                                                                                                                .jam-url a {
-                                                                                                                                          color: #00ff00;
-                                                                                                                                                    font-size: 0.9rem;
-                                                                                                                                                              text-decoration: none;
-                                                                                                                                                                        border-bottom: 1px dotted #00ff00;
-                                                                                                                                                                                  letter-spacing: 1px;
-                                                                                                                                                                                            text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
-                                                                                                                                                                                                    }
-                                                                                                                                
-                                                                                                                                    .jam-url a:hover {
-                                                                                                                                              color: #ffffff;
-                                                                                                                                                        border-bottom-color: #ffffff;
-                                                                                                                                                                  text-shadow: 0 0 8px #00ff00;
-                                                                                                                                                                          }
-                                                                                                                                    
-                                                                                                                                        .jam-buttons {
-                                                                                                                                                  display: flex;
-                                                                                                                                                            gap: 10px;
-                                                                                                                                                                      justify-content: center;
-                                                                                                                                                                                margin: 0.6rem 0 1rem;
-                                                                                                                                                                                          flex-wrap: wrap;
-                                                                                                                                                                                                  }
-                                                                                                                                        
-                                                                                                                                            .jam-btn {
-                                                                                                                                                      padding: 10px 18px;
-                                                                                                                                                                border: 2px solid #00ff00;
-                                                                                                                                                                          background: rgba(0, 255, 0, 0.1);
-                                                                                                                                                                                    color: #00ff00;
-                                                                                                                                                                                              font-family: 'Courier New', monospace;
-                                                                                                                                                                                                        font-size: 0.95rem;
-                                                                                                                                                                                                                  font-weight: bold;
-                                                                                                                                                                                                                            border-radius: 4px;
-                                                                                                                                                                                                                                      letter-spacing: 2px;
-                                                                                                                                                                                                                                                text-decoration: none;
-                                                                                                                                                                                                                                                          cursor: pointer;
-                                                                                                                                                                                                                                                                    transition: all 0.3s ease;
-                                                                                                                                                                                                                                                                            }
-                                                                                                                                            
-                                                                                                                                                .jam-btn:hover {
-                                                                                                                                                          background: rgba(0, 255, 0, 0.25);
-                                                                                                                                                                    box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
-                                                                                                                                                                              color: #00ff00;
-                                                                                                                                                                                      }
-                                                                                                                                                
-                                                                                                                                                    .jam-btn.jam-btn-live {
-                                                                                                                                                              border-color: #ff4444;
-                                                                                                                                                                        background: rgba(255, 68, 68, 0.12);
-                                                                                                                                                                                  color: #ff4444;
-                                                                                                                                                                                          }
-                                                                                                                                                    
-                                                                                                                                                        .jam-btn.jam-btn-live:hover {
-                                                                                                                                                                  background: rgba(255, 68, 68, 0.25);
-                                                                                                                                                                            box-shadow: 0 0 15px rgba(255, 68, 68, 0.6);
-                                                                                                                                                                                      color: #ff4444;
-                                                                                                                                                                                              }
-                                                                                                                                                        
-                                                                                                                                                            .jam-player {
-                                                                                                                                                                      border: 1px dotted #00ff00;
-                                                                                                                                                                                border-radius: 4px;
-                                                                                                                                                                                          padding: 0.7rem 0.6rem 0.5rem;
-                                                                                                                                                                                                    margin-top: 0.6rem;
-                                                                                                                                                                                                              background: rgba(0, 50, 0, 0.3);
-                                                                                                                                                                                                                      }
-                                                                                                                                                            
-                                                                                                                                                                .jam-waveform {
-                                                                                                                                                                          display: flex;
-                                                                                                                                                                                    align-items: flex-end;
-                                                                                                                                                                                              justify-content: space-between;
-                                                                                                                                                                                                        height: 44px;
-                                                                                                                                                                                                                  gap: 2px;
-                                                                                                                                                                                                                            margin-bottom: 6px;
-                                                                                                                                                                                                                                    }
-                                                                                                                                                                
-                                                                                                                                                                    .jam-waveform span {
-                                                                                                                                                                              flex: 1;
-                                                                                                                                                                                        background: linear-gradient(to top, #006600, #00ff00);
-                                                                                                                                                                                                  box-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
-                                                                                                                                                                                                            border-radius: 1px;
-                                                                                                                                                                                                                      min-width: 2px;
-                                                                                                                                                                                                                                animation: jam-bar 1.4s ease-in-out infinite;
-                                                                                                                                                                                                                                        }
-                                                                                                                                                                    
-                                                                                                                                                                        @keyframes jam-bar {
-                                                                                                                                                                            
-                                                                                                                                                                                  0%,
-                                                                                                                                                                                        100% {
-                                                                                                                                                                                                    transform: scaleY(1);
-                                                                                                                                                                                                              }
-                                                                                                                                                                                        
-                                                                                                                                                                                              50% {
-                                                                                                                                                                                                          transform: scaleY(0.35);
-                                                                                                                                                                                                                    }
-                                                                                                                                                                                                  }
-                                                                                                                                                                        
-                                                                                                                                                                            .jam-progress {
-                                                                                                                                                                                      width: 100%;
-                                                                                                                                                                                                height: 6px;
-                                                                                                                                                                                                          background: rgba(0, 255, 0, 0.1);
-                                                                                                                                                                                                                    border: 1px solid #00ff00;
-                                                                                                                                                                                                                              border-radius: 3px;
-                                                                                                                                                                                                                                        position: relative;
-                                                                                                                                                                                                                                                  margin: 6px 0 4px;
-                                                                                                                                                                                                                                                          }
-                                                                                                                                                                            
-                                                                                                                                                                                .jam-progress::after {
-                                                                                                                                                                                          content: '';
-                                                                                                                                                                                                    position: absolute;
-                                                                                                                                                                                                              left: 0;
-                                                                                                                                                                                                                        top: -5px;
-                                                                                                                                                                                                                                  width: 14px;
-                                                                                                                                                                                                                                            height: 14px;
-                                                                                                                                                                                                                                                      border-radius: 50%;
-                                                                                                                                                                                                                                                                background: #00ff00;
-                                                                                                                                                                                                                                                                          box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
-                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                
-                                                                                                                                                                                    .jam-time {
-                                                                                                                                                                                              display: flex;
-                                                                                                                                                                                                        justify-content: space-between;
-                                                                                                                                                                                                                  font-size: 0.75rem;
-                                                                                                                                                                                                                            color: #00aa00;
-                                                                                                                                                                                                                                      letter-spacing: 1px;
-                                                                                                                                                                                                                                              }
-                                                                                                                                                                                    
-                                                                                                                                                                                        .jam-ascii {
-                                                                                                                                                                                                  margin: 1rem 0 0;
-                                                                                                                                                                                                            font-family: 'Courier New', monospace;
-                                                                                                                                                                                                                      font-size: 0.6rem;
-                                                                                                                                                                                                                                line-height: 1;
-                                                                                                                                                                                                                                          color: rgba(0, 255, 0, 0.55);
-                                                                                                                                                                                                                                                    white-space: pre;
-                                                                                                                                                                                                                                                              overflow: hidden;
-                                                                                                                                                                                                                                                                        text-align: left;
-                                                                                                                                                                                                                                                                                }
-                                                                                                                                                                                        
-                                                                                                                                                                                            @media screen and (max-width: 600px) {
-                                                                                                                                                                                                      .jam-flyer {
-                                                                                                                                                                                                                  max-width: 100%;
-                                                                                                                                                                                                                            }
-                                                                                                                                                                                                      
-                                                                                                                                                                                                            .jam-flyer h2 {
-                                                                                                                                                                                                                        font-size: 4rem;
-                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                            
-                                                                                                                                                                                                                  .jam-date {
-                                                                                                                                                                                                                              font-size: 3.4rem;
-                                                                                                                                                                                                                                        }
-                                                                                                                                                                                                                  
-                                                                                                                                                                                                                        .jam-sub {
-                                                                                                                                                                                                                                    font-size: 2.2rem;
-                                                                                                                                                                                                                                              }
-                                                                                                                                                                                                                        
-                                                                                                                                                                                                                              .jam-url a {
-                                                                                                                                                                                                                                          font-size: 2rem;
-                                                                                                                                                                                                                                                    }
-                                                                                                                                                                                                                              
-                                                                                                                                                                                                                                    .jam-live-dot {
-                                                                                                                                                                                                                                                width: 200px;
-                                                                                                                                                                                                                                                            height: 200px;
-                                                                                                                                                                                                                                                                        font-size: 3rem;
-                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                          .jam-btn {
-                                                                                                                                                                                                                                                      font-size: 2rem;
-                                                                                                                                                                                                                                                                  padding: 18px 28px;
-                                                                                                                                                                                                                                                                            }
-                                                                                                                                                                                                                                          
-                                                                                                                                                                                                                                                .jam-waveform {
-                                                                                                                                                                                                                                                            height: 80px;
-                                                                                                                                                                                                                                                                      }
-                                                                                                                                                                                                                                                
-                                                                                                                                                                                                                                                      .jam-ascii {
-                                                                                                                                                                                                                                                                  font-size: 1.4rem;
-                                                                                                                                                                                                                                                                            }
-                                                                                                                                                                                                                                                      
-                                                                                                                                                                                                                                                            .jam-time {
-                                                                                                                                                                                                                                                                        font-size: 1.8rem;
-                                                                                                                                                                                                                                                                                  }
-                                                                                                                                                                                                                                                                }
-                                                                                                                                                                                              
-        .back-link {
-            text-align: center;
-            margin-bottom: 1rem;
-        }
+      background: #08ff08;
+      color: black;
+      font-family: 'TerminalGrotesqueOpenRegular', monospace;
+      font-size: 2rem;
+      margin: 0;
+      padding: 3rem;
+    }
 
-        /* ---- feedback form ---------------------------------------------- */
-        .feedback-article {
-            max-width: 100%;
-        }
+    a {
+      color: black;
+    }
 
-        .feedback-form textarea {
-            display: block;
-            box-sizing: border-box;
-            width: 100%;
-            margin: 0.3rem 0 1.4rem 0;
-            padding: 0.4rem;
-            background: transparent;
-            color: black;
-            border: 2px solid black;
-            border-radius: 0;
-            font-family: inherit;
-            font-size: 1.3rem;
-            line-height: 1.2;
-            resize: vertical;
-        }
+    img {
+      max-width: 80rem;
+    }
 
-        .feedback-form textarea:focus {
-            outline: none;
-            background: rgba(255, 255, 255, 0.4);
-        }
+    small {
+      font-size: 1.2rem;
+      color: #252;
+    }
 
-        .feedback-form label {
-            display: block;
-            font-size: 1.5rem;
-        }
+    .headline {
+      font-size: 4rem;
+      font-weight: 600;
+    }
 
-        /* the language buttons reuse the nav button styling, but three across,
+    .headline-logo {
+      height: 1.5em;
+      /* match text height */
+      width: auto;
+      vertical-align: -0.12em;
+      /* fine baseline tweak */
+    }
+
+    .headline small {
+      font-size: 2rem;
+      color: inherit;
+    }
+
+    #room-status {
+      color: #252;
+      text-decoration: underline wavy;
+    }
+
+    #room-status.open {
+      color: hsl(285 100% 40%);
+      text-decoration-color: hsl(285 100% 26%);
+      font-size: 3rem;
+      text-decoration: none;
+    }
+
+    /* Start https://www.cursors-4u.com */
+    * {
+      cursor: url(https://ani.cursors-4u.net/smiley/smi-3/smi319.cur), auto !important;
+    }
+
+    /* End https://www.cursors-4u.com */
+    /*max-width: 800px;*/
+    .news-container {
+      padding: 0;
+      background: pink;
+      background: linear-gradient(0deg, pink 50%, PaleTurquoise 100%);
+      box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
+      text-align: left;
+      font-family: 'TerminalGrotesqueOpenRegular', monospace !important;
+      border-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACoAAAAqCAYAAADFw8lbAAAAAXNSR0IArs4c6QAAA05JREFUWEe9WVmWHDEIs+9/6JrnDSMQNp55SX8knWovQoitUkv71FLqV8rX/+E+X19Qvvln/ws+49fnT9+i9u5zyYHuUg7U4bqgiqADI9a2qunQJ7TvGqgwN1AAi2D6RHkz0gGZ+1LkW6YPQK+ubPQETu/Pn4H607oHatOVAarBCaNNvorjUI51av2bal5nOwYnIOuRiOm+7gBUQD8dKBTXUmeAIgChrUkSfvoD0C1TTbUmuD0nLk65XpiaBxCg/Zw/MIoGZLVopZDzVBOUTZC5aDYZN3LxzpGBVrXraVAOePXrOd7kIImZU8hjop4WOwnsux3QIJjsneApZkqUH1P5z+cNLD+EgdR9T0D14h28ufp52DuA+gWDGEt/yxUs4ZEeQDFAr79WCqlQVJpuey+tmTxqd0auygJc62IpobtcerIHBNHqu6c8QqDwmNZm+2JcjxZAQveSMBXl6j6WWLppt/wLvYQWsoh36FKj799tRfLhTPvasNntV8w0icC3bbSOG6C604uAaqwRtSHlyvBxvlkpjEbBtBrYqOfHqD+MBpF2J6BjE2LzMYt6EkRgq4t6z1n05BhMCxtNf1qj/yHqgeNEMO31vwDq+sgwO10SgopX6DFc0FqN2jp21ChmtHwmVRPvTaMruN0oQrsXAkgqxaJEM5f5LiXU3Dj32hiR+47tlSqzJI9eO6MD1ZIuSPDCtgXUKcn2gWu440AplKeozwJ1N11momQwXSIJS2hfvAGPvZAGzWzeVySGt4fgiZcqz2mgThKQEliTcCosz0hJkCXavI1RM5ocNf6F608xp6dQ6FFEK7dsgLvI6527TNGrZv3DcIc7k4z/ShVsk9y3KlNUc6P3prcabS/t76TK514jQFRD+zt66gegnJxHoEPTZHhcBvD6ZCYAbZUBAMVTH4bpq1Vi3Cn50GiOlkYl9H0OblxTqDy9NQnLO8EIYQyr5ZORZs822qXo+vjtuqv1V6BRMzGfK8ZMpeESsq4/3j8OF7HTJoNaTqr5et95q2wLdoLRbTDVaJT/Is3t0twxauOPaSeZyNKuH+cRCpcUvAHHVD8ZJ2Zz5zugkYGr017/FyUb/1YB3PhqpQB4jj8GwRPs2W8TkgbEhYZQ9gPxQXU7A0FWUQAAAABJRU5ErkJggg==') 14 / 14px / 0 round;
+      border-width: 14px;
+      border-style: solid;
+    }
+
+    iframe {
+      width: 100%;
+      height: 300px;
+      /* Adjust as needed */
+      border: none;
+    }
+
+    a:hover img {
+      filter: invert(100%);
+    }
+
+    .rainbow-text {
+      background-image: linear-gradient(to right,
+          #ff0000, #ff6b6b, #ff7f00, #ffff00,
+          #0000ff, #0000ff, #7f00ff, #ff007f);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: bold;
+      animation: gradient-animation 5s ease infinite;
+    }
+
+    .rainbow-text2 {
+      background-image: linear-gradient(to right,
+          HotPink, HotPink, HotPink, #08ff08, #08ff08, #08ff08, Black, Black, Black);
+      background-size: 50% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: bold;
+      animation: gradient-animation 15s ease infinite;
+    }
+
+    @keyframes gradient-animation {
+      0% {
+        background-position: 0% 50%;
+      }
+
+      50% {
+        background-position: 100% 50%;
+      }
+
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    .flexhex {
+      width: 100%;
+      display: inline-flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      align-items: normal;
+      box-sizing: border-box;
+      -moz-box-sizing: border-box;
+      -webkit-box-sizing: border-box;
+    }
+
+    article {
+      margin-bottom: 1rem;
+      max-width: 48%;
+    }
+
+    @media screen and (max-width: 600px) {
+      body {
+        font-size: 6rem;
+        padding: 0;
+      }
+
+      img {
+        max-width: 100%;
+      }
+
+      article {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      small {
+        font-size: 3rem;
+      }
+
+      .headline {
+        font-size: 8rem;
+      }
+
+      .headline small {
+        font-size: 6rem;
+      }
+
+      .top-row {
+        flex-direction: column;
+      }
+
+      .button-container {
+        margin: 1rem 0 0 0;
+      }
+
+      button {
+        font-size: 2rem;
+      }
+    }
+
+    /* Header row: headline + nav buttons */
+    .top-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    /* Button Styling */
+    .button-container {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 8px;
+      margin: 0 0 0 auto;
+    }
+
+    button {
+      background-color: limegreen;
+      color: black;
+      border: 2px solid pink;
+      padding: 10px 20px;
+      font-size: 0.8em;
+      font-family: 'TerminalGrotesqueOpenRegular', monospace !important;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    button:hover {
+      background-color: black;
+      color: limegreen;
+    }
+
+    button:hover span {
+      color: limegreen;
+      mix-blend-mode: normal;
+    }
+
+    .jam-flyer {
+      width: 100%;
+      max-width: 420px;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      border: 2px solid #00ff00;
+      border-radius: 12px;
+      padding: 1.6rem 1.4rem;
+      box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.1);
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .jam-flyer h2 {
+      margin: 0 0 1rem 0;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px #00ff00;
+      font-weight: bold;
+    }
+
+    .jam-live-dot {
+      width: 110px;
+      height: 110px;
+      margin: 0.6rem auto 1rem;
+      border-radius: 50%;
+      border: 3px solid #ff4444;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 68, 68, 0.5), rgba(0, 0, 0, 0.9));
+      box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
+      color: #ff4444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 1.4rem;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px #ff4444, 0 0 20px #ff0000;
+      animation: jam-live-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes jam-live-pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 30px rgba(255, 68, 68, 0.8), inset 0 0 20px rgba(255, 68, 68, 0.4);
+      }
+
+      50% {
+        box-shadow: 0 0 45px rgba(255, 68, 68, 1), inset 0 0 25px rgba(255, 68, 68, 0.6);
+      }
+    }
+
+    .jam-date {
+      font-size: 1.4rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin: 0.4rem 0 0.2rem;
+      text-shadow: 0 0 6px #00ff00;
+    }
+
+    .jam-sub {
+      font-size: 0.95rem;
+      color: #00aa00;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 0.3rem;
+    }
+
+    .jam-url {
+      margin-bottom: 1.1rem;
+    }
+
+    .jam-url a {
+      color: #00ff00;
+      font-size: 0.9rem;
+      text-decoration: none;
+      border-bottom: 1px dotted #00ff00;
+      letter-spacing: 1px;
+      text-shadow: 0 0 6px rgba(0, 255, 0, 0.6);
+    }
+
+    .jam-url a:hover {
+      color: #ffffff;
+      border-bottom-color: #ffffff;
+      text-shadow: 0 0 8px #00ff00;
+    }
+
+    .jam-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 0.6rem 0 1rem;
+      flex-wrap: wrap;
+    }
+
+    .jam-btn {
+      padding: 10px 18px;
+      border: 2px solid #00ff00;
+      background: rgba(0, 255, 0, 0.1);
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      font-size: 0.95rem;
+      font-weight: bold;
+      border-radius: 4px;
+      letter-spacing: 2px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .jam-btn:hover {
+      background: rgba(0, 255, 0, 0.25);
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+      color: #00ff00;
+    }
+
+    .jam-btn.jam-btn-live {
+      border-color: #ff4444;
+      background: rgba(255, 68, 68, 0.12);
+      color: #ff4444;
+    }
+
+    .jam-btn.jam-btn-live:hover {
+      background: rgba(255, 68, 68, 0.25);
+      box-shadow: 0 0 15px rgba(255, 68, 68, 0.6);
+      color: #ff4444;
+    }
+
+    .jam-player {
+      border: 1px dotted #00ff00;
+      border-radius: 4px;
+      padding: 0.7rem 0.6rem 0.5rem;
+      margin-top: 0.6rem;
+      background: rgba(0, 50, 0, 0.3);
+    }
+
+    .jam-waveform {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      height: 44px;
+      gap: 2px;
+      margin-bottom: 6px;
+    }
+
+    .jam-waveform span {
+      flex: 1;
+      background: linear-gradient(to top, #006600, #00ff00);
+      box-shadow: 0 0 3px rgba(0, 255, 0, 0.5);
+      border-radius: 1px;
+      min-width: 2px;
+      animation: jam-bar 1.4s ease-in-out infinite;
+    }
+
+    @keyframes jam-bar {
+
+      0%,
+      100% {
+        transform: scaleY(1);
+      }
+
+      50% {
+        transform: scaleY(0.35);
+      }
+    }
+
+    .jam-progress {
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 255, 0, 0.1);
+      border: 1px solid #00ff00;
+      border-radius: 3px;
+      position: relative;
+      margin: 6px 0 4px;
+    }
+
+    .jam-progress::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: -5px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #00ff00;
+      box-shadow: 0 0 8px rgba(0, 255, 0, 0.8);
+    }
+
+    .jam-time {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #00aa00;
+      letter-spacing: 1px;
+    }
+
+    .jam-ascii {
+      margin: 1rem 0 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.6rem;
+      line-height: 1;
+      color: rgba(0, 255, 0, 0.55);
+      white-space: pre;
+      overflow: hidden;
+      text-align: left;
+    }
+
+    @media screen and (max-width: 600px) {
+      .jam-flyer {
+        max-width: 100%;
+      }
+
+      .jam-flyer h2 {
+        font-size: 4rem;
+      }
+
+      .jam-date {
+        font-size: 3.4rem;
+      }
+
+      .jam-sub {
+        font-size: 2.2rem;
+      }
+
+      .jam-url a {
+        font-size: 2rem;
+      }
+
+      .jam-live-dot {
+        width: 200px;
+        height: 200px;
+        font-size: 3rem;
+      }
+
+      .jam-btn {
+        font-size: 2rem;
+        padding: 18px 28px;
+      }
+
+      .jam-waveform {
+        height: 80px;
+      }
+
+      .jam-ascii {
+        font-size: 1.4rem;
+      }
+
+      .jam-time {
+        font-size: 1.8rem;
+      }
+    }
+
+    .back-link {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    /* ---- feedback form ---------------------------------------------- */
+    .feedback-article {
+      max-width: 100%;
+    }
+
+    .feedback-form textarea {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0.3rem 0 1.4rem 0;
+      padding: 0.4rem;
+      background: transparent;
+      color: black;
+      border: 2px solid black;
+      border-radius: 0;
+      font-family: inherit;
+      font-size: 1.3rem;
+      line-height: 1.2;
+      resize: vertical;
+    }
+
+    .feedback-form textarea:focus {
+      outline: none;
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .feedback-form label {
+      display: block;
+      font-size: 1.5rem;
+    }
+
+    /* the language buttons reuse the nav button styling, but three across,
            not the two-column grid the nav uses */
-        .lang-switch {
-            grid-template-columns: repeat(3, auto);
-        }
+    .lang-switch {
+      grid-template-columns: repeat(3, auto);
+    }
 
-        .lang-switch button[aria-pressed="true"] span {
-            text-decoration: underline;
-        }
+    .lang-switch button[aria-pressed="true"] span {
+      text-decoration: underline;
+    }
 
-        /* like .jam-ascii, but black - that one is green for the dark jam card */
-        .feedback-ascii {
-            margin: 1.5rem 0;
-            font-family: 'Courier New', monospace;
-            font-size: 1rem;
-            line-height: 1.15;
-            color: black;
-            white-space: pre;
-            overflow: hidden;
-        }
+    /* like .jam-ascii, but black - that one is green for the dark jam card */
+    .feedback-ascii {
+      margin: 1.5rem 0;
+      font-family: 'Courier New', monospace;
+      font-size: 1rem;
+      line-height: 1.15;
+      color: black;
+      white-space: pre;
+      overflow: hidden;
+    }
 
-        .feedback-note {
-            font-size: 1.2rem;
-        }
+    .feedback-note {
+      font-size: 1.2rem;
+    }
 
-        .feedback-error {
-            font-weight: bold;
-        }
+    .feedback-error {
+      font-weight: bold;
+    }
 
-        /* bait for bots, never shown to people */
-        .feedback-hp {
-            position: absolute;
-            left: -9999px;
-            width: 1px;
-            height: 1px;
-            overflow: hidden;
-        }
-                                                                                              </style>
+    /* bait for bots, never shown to people */
+    .feedback-hp {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+  </style>
 </head>
 
 <body>
@@ -631,12 +631,11 @@
     // Nextcloud form, word for word; English and Spanish are translations of it.
     const CONTENT = {
       de: {
-        greeting: 'Hi! Was w\u00fcnschst du dir f\u00fcr die Kyosk-Welt?',
         title: 'Feedback zu Erfahrungen im kyosk',
         intro: 'Um die Barrieren, welche Menschen am Besuchen des kyosk, hindert, sammeln wir Feedback bzgl. Erfahrungen und Anregungen, wie wir besser damit umgehen k\u00f6nnen.',
         questions: [
           'Was hindert dich daran, in den kyosk zu gehen? Welche Hindernisse gibt es?',
-          'Was braucht die kyosk-Crew von dir, damit du dich sicherer f\u00fchlst? Was k\u00f6nnen wir tun, damit es dir bei uns besser geht?',
+          'Was brauchst du von der kyosk-crew, damit du dich sicherer f\u00fchlst? Was k\u00f6nnen wir tun, damit es dir bei uns besser geht?',
           'Was findest du bzgl. Wohlbefinden bereits gut? Welche Strukturen sollen wir beibehalten?',
           'W\u00fcrdest du uns sonst gerne noch etwas mitteilen?'
         ],
