@@ -573,7 +573,7 @@
   <div class="bg2"></div>
 
   <div class="top-row">
-    <div class="headline" id="fb-greeting"></div>
+    <div class="headline" id="fb-title"></div>
     <div class="button-container lang-switch" id="fb-langs">
       <button type="button" data-lang="de"><span class="button-text">DE</span></button>
       <button type="button" data-lang="en"><span class="button-text">EN</span></button>
@@ -586,7 +586,6 @@
     <article class="feedback-article">
       <p class="rainbow-text2">*. ⋅ ˚̣- : ✧ : – ⭒ ⊹ ⭒ – : ✧ : -˚̣⋅ .*</p>
 
-      <p class="rainbow-text" id="fb-title"></p>
       <p id="fb-intro"></p>
 
       <pre class="feedback-ascii" aria-hidden="true"> ___       ____       ____
@@ -632,7 +631,6 @@
     // Nextcloud form, word for word; English, Spanish and French are translations of it.
     const CONTENT = {
       de: {
-        greeting: 'Hi! Was wünschst du dir für die Kyosk-Welt?',
         title: 'Feedback zu Erfahrungen im kyosk',
         intro: 'Um die Barrieren, welche Menschen am Besuchen des kyosk, hindert, sammeln wir Feedback bzgl. Erfahrungen und Anregungen, wie wir besser damit umgehen k\u00f6nnen.',
         questions: [
@@ -648,7 +646,6 @@
         failed: 'Das hat nicht geklappt - bitte sp\u00e4ter nochmal versuchen.'
       },
       en: {
-        greeting: 'Hi! What do you want for the Kyosk World?',
         title: 'Feedback on experiences at the kyosk',
         intro: 'To understand the barriers that keep people from coming to the kyosk, we are collecting feedback about experiences, and suggestions for how we can deal with them better.',
         questions: [
@@ -664,7 +661,6 @@
         failed: 'That did not work - please try again later.'
       },
       es: {
-        greeting: '\u00a1Hola! \u00bfQu\u00e9 deseas para el mundo del Kyosk?',
         title: 'Comentarios sobre experiencias en el kyosk',
         intro: 'Para entender las barreras que impiden a las personas venir al kyosk, recogemos comentarios sobre experiencias y sugerencias de c\u00f3mo podemos manejarlas mejor.',
         questions: [
@@ -680,7 +676,6 @@
         failed: 'No ha funcionado - int\u00e9ntalo de nuevo m\u00e1s tarde.'
       },
       fr: {
-        greeting: 'Salut\u00a0! Que souhaites-tu pour le monde du Kyosk\u00a0?',
         title: 'Retours sur les exp\u00e9riences au kyosk',
         intro: 'Pour comprendre les obstacles qui emp\u00eachent des personnes de venir au kyosk, nous recueillons des retours sur des exp\u00e9riences et des id\u00e9es pour mieux y faire face.',
         questions: [
@@ -724,7 +719,6 @@
     function render(typed) {
       const text = CONTENT[lang];
       document.documentElement.lang = lang;
-      document.getElementById('fb-greeting').textContent = text.greeting;
       document.getElementById('fb-title').textContent = text.title;
       document.getElementById('fb-intro').textContent = text.intro;
       document.getElementById('fb-note').textContent = text.note;
