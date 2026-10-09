@@ -1816,7 +1816,7 @@ def feedback():
 
     answers = data.get("answers") or []
     questions = data.get("questions") or []
-    lang = data.get("lang") if data.get("lang") in ("de", "en", "es") else "de"
+    lang = data.get("lang") if data.get("lang") in ("de", "en", "es", "fr") else "de"
 
     if not isinstance(answers, list) or not any(
         isinstance(answer, str) and answer.strip() for answer in answers

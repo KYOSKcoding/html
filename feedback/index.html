@@ -521,10 +521,10 @@
       font-size: 1.5rem;
     }
 
-    /* the language buttons reuse the nav button styling, but three across,
+    /* the language buttons reuse the nav button styling, but four across,
            not the two-column grid the nav uses */
     .lang-switch {
-      grid-template-columns: repeat(3, auto);
+      grid-template-columns: repeat(4, auto);
     }
 
     .lang-switch button[aria-pressed="true"] span {
@@ -578,6 +578,7 @@
       <button type="button" data-lang="de"><span class="button-text">DE</span></button>
       <button type="button" data-lang="en"><span class="button-text">EN</span></button>
       <button type="button" data-lang="es"><span class="button-text">ES</span></button>
+      <button type="button" data-lang="fr"><span class="button-text">FR</span></button>
     </div>
   </div>
 
@@ -628,9 +629,10 @@
   <script>
     // Everything the page says, in one place: swapping the questionnaire later means
     // editing this object and nothing else. The German is the wording of the original
-    // Nextcloud form, word for word; English and Spanish are translations of it.
+    // Nextcloud form, word for word; English, Spanish and French are translations of it.
     const CONTENT = {
       de: {
+        greeting: 'Hi! Was wünschst du dir für die Kyosk-Welt?',
         title: 'Feedback zu Erfahrungen im kyosk',
         intro: 'Um die Barrieren, welche Menschen am Besuchen des kyosk, hindert, sammeln wir Feedback bzgl. Erfahrungen und Anregungen, wie wir besser damit umgehen k\u00f6nnen.',
         questions: [
@@ -651,11 +653,10 @@
         intro: 'To understand the barriers that keep people from coming to the kyosk, we are collecting feedback about experiences, and suggestions for how we can deal with them better.',
         questions: [
           'What keeps you from going to the kyosk? What barriers are there?',
-          'What does the kyosk crew need from you so that you feel safer? What can we do so that you are better off with us?',
-          'What do you already find good when it comes to wellbeing? Which structures should we keep?',
+          'What do you need from the kyosk crew so that you feel safer? What can we do so that you are better off with us?',
           'Is there anything else you would like to tell us?'
         ],
-        note: 'Every question is optional. It goes to the kyosk crew anonymously - we do not ask for a name or an address.',
+        note: 'Your answers go to the kyosk crew anonymously - make sure not to mention real names or other personal data. If you would like a reply, write to us at interym at riseup dot net.',
         submit: 'send',
         sending: 'sending ...',
         thanks: 'Thank you! Your feedback reached the kyosk crew.',
@@ -668,22 +669,37 @@
         intro: 'Para entender las barreras que impiden a las personas venir al kyosk, recogemos comentarios sobre experiencias y sugerencias de c\u00f3mo podemos manejarlas mejor.',
         questions: [
           '\u00bfQu\u00e9 te impide ir al kyosk? \u00bfQu\u00e9 barreras hay?',
-          '\u00bfQu\u00e9 necesita de ti el equipo del kyosk para que te sientas con m\u00e1s seguridad? \u00bfQu\u00e9 podemos hacer para que te sientas mejor en el kyosk?',
-          '\u00bfQu\u00e9 te parece que ya est\u00e1 bien en cuanto al bienestar? \u00bfQu\u00e9 estructuras deber\u00edamos mantener?',
+          '\u00bfQu\u00e9 necesitas del equipo del kyosk para que te sientas con m\u00e1s seguridad? \u00bfQu\u00e9 podemos hacer para que te sientas mejor en el kyosk?',
           '\u00bfHay algo m\u00e1s que quieras contarnos?'
         ],
-        note: 'Todas las preguntas son opcionales. Llega al equipo del kyosk de forma an\u00f3nima: no pedimos ni nombre ni direcci\u00f3n.',
+        note: 'Tus respuestas llegan al equipo del kyosk de forma an\u00f3nima - procura no mencionar nombres reales ni otros datos personales. Si quieres una respuesta, escr\u00edbenos a interym at riseup dot net.',
         submit: 'enviar',
         sending: 'enviando ...',
         thanks: '\u00a1Gracias! Tu comentario lleg\u00f3 al equipo del kyosk.',
         empty: 'Escribe algo en uno de los campos primero.',
         failed: 'No ha funcionado - int\u00e9ntalo de nuevo m\u00e1s tarde.'
+      },
+      fr: {
+        greeting: 'Salut\u00a0! Que souhaites-tu pour le monde du Kyosk\u00a0?',
+        title: 'Retours sur les exp\u00e9riences au kyosk',
+        intro: 'Pour comprendre les obstacles qui emp\u00eachent des personnes de venir au kyosk, nous recueillons des retours sur des exp\u00e9riences et des id\u00e9es pour mieux y faire face.',
+        questions: [
+          'Qu\'est-ce qui t\'emp\u00eache de venir au kyosk\u00a0? Quels sont les obstacles\u00a0?',
+          'De quoi as-tu besoin de la part du kyosk pour te sentir plus en s\u00e9curit\u00e9\u00a0? Que peut-on faire pour que tu te sentes mieux chez nous\u00a0?',
+          'Y a-t-il autre chose que tu aimerais nous dire\u00a0?'
+        ],
+        note: 'Tes r\u00e9ponses arrivent anonymement \u00e0 l\'\u00e9quipe du kyosk - veille \u00e0 ne pas donner de vrais noms ni d\'autres donn\u00e9es personnelles. Si tu veux une r\u00e9ponse, \u00e9cris-nous \u00e0 interym at riseup dot net.',
+        submit: 'envoyer',
+        sending: 'envoi en cours ...',
+        thanks: 'Merci\u00a0! Ton retour est bien arriv\u00e9 \u00e0 l\'\u00e9quipe du kyosk.',
+        empty: '\u00c9cris d\'abord quelque chose dans l\'un des champs.',
+        failed: '\u00c7a n\'a pas march\u00e9 - r\u00e9essaie plus tard.'
       }
     };
 
     // Apache serves this page; only /kyosky is proxied to the application
     const API_URL = '/kyosky/api/feedback';
-    const LANGS = ['de', 'en', 'es'];
+    const LANGS = ['de', 'en', 'es', 'fr'];
     const STORED_LANG = 'kyosk-lang';   // shared with the awareness page
 
     let lang = pickLang();
