@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh kyosk@libra.uberspace.de 'ls -la ~/bin/start-radio-hls.sh 2>/dev/null; echo ---; readlink -f ~/bin/start-radio-hls.sh 2>/dev/null; echo ---; bash --version | head -1; echo ---; stat --version | head -1')"
+    ]
+  }
+}
