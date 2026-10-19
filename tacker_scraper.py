@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup
+import json
 import requests
 
 # URL of the page to scrape
@@ -47,6 +48,7 @@ for event in events:
         "start_time": start_time,
         "end_time": end_time,
         "event_type": event_type,
+        "datetime": time_elements[0]["datetime"] if time_elements else "",
     }
 
     event_list.append(event_data)
@@ -150,6 +152,22 @@ with open("/home/kyosk/html/events_table.html", "w") as file:
     file.write(html_content)
 
 print("events_table.html created successfully.")
+
+# Next jam session for the flyer on the start page
+jam = {}
+for event in event_list:
+    if "jam" in event["title"].lower() and event["datetime"]:
+        year, month, day = event["datetime"][:10].split("-")
+        jam = {
+            "date": f"{day}.{month}.",
+            "start": event["start_time"].split(":")[0],
+            "end": event["end_time"].split(":")[0],
+            "title": event["title"],
+        }
+        break
+
+with open("/home/kyosk/html/jam.json", "w") as file:
+    json.dump(jam, file, ensure_ascii=False)
 
 # # Print results
 # for e in event_list:

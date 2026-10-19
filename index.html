@@ -567,7 +567,7 @@
     <article class="jam-flyer">
       <h2>Open-Mic Jam session<br>im Kyosk!!</h2>
       <div class="jam-live-dot">LIVE</div>
-      <div class="jam-date">08.10. // 18&ndash;22h</div>
+      <div class="jam-date" id="jam-date">DD.MM. // 18&ndash;22h</div>
       <div class="jam-sub">Live @Ky-Radio</div>
       <div class="jam-url"><a href="https://kyo.sk/radio/">https://kyo.sk/radio/</a></div>
       <div class="jam-buttons">
@@ -673,6 +673,17 @@
     </div>
   </div>
   <!-- Mouse vs Cat-->
+  <script>
+    // next jam date, written by tacker_scraper.py
+    fetch('jam.json', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(jam => {
+        if (jam.date) {
+          document.getElementById('jam-date').textContent = `${jam.date} // ${jam.start}\u2013${jam.end}h`;
+        }
+      })
+      .catch(() => {});
+  </script>
 </body>
 
 </html>
